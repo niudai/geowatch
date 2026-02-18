@@ -10,7 +10,7 @@ const features = [
     description:
       "Track your brand mentions across ChatGPT, Perplexity, Google AI Overviews, Claude, Grok, and more — updated daily with full citation context.",
     gradient: "from-emerald-500/15 to-transparent",
-    border: "border-white/[0.1] hover:border-emerald-500/40",
+    border: "border-zinc-700/50 hover:border-emerald-500/50",
     iconColor: "text-emerald-400",
     iconBg: "bg-emerald-500/15",
   },
@@ -20,7 +20,7 @@ const features = [
     description:
       "Get a single GEO score that quantifies how visible your brand is in AI search results versus your competitors. Track progress week over week.",
     gradient: "from-cyan-500/15 to-transparent",
-    border: "border-white/[0.1] hover:border-cyan-500/40",
+    border: "border-zinc-700/50 hover:border-cyan-500/50",
     iconColor: "text-cyan-400",
     iconBg: "bg-cyan-500/15",
   },
@@ -30,7 +30,7 @@ const features = [
     description:
       "Discover what AI users are actually asking. See search volume for 120M+ AI chat queries relevant to your market and find untapped opportunities.",
     gradient: "from-violet-500/15 to-transparent",
-    border: "border-white/[0.1] hover:border-violet-500/40",
+    border: "border-zinc-700/50 hover:border-violet-500/50",
     iconColor: "text-violet-400",
     iconBg: "bg-violet-500/15",
   },
@@ -40,7 +40,7 @@ const features = [
     description:
       "Get specific, actionable tasks: which content to create, which pages to refresh, which sites to get cited on — prioritized by impact.",
     gradient: "from-amber-500/15 to-transparent",
-    border: "border-white/[0.1] hover:border-amber-500/40",
+    border: "border-zinc-700/50 hover:border-amber-500/50",
     iconColor: "text-amber-400",
     iconBg: "bg-amber-500/15",
   },
@@ -50,7 +50,7 @@ const features = [
     description:
       "See exactly which prompts your competitors rank for but you don't. Find the gaps and systematically capture that traffic before they solidify.",
     gradient: "from-pink-500/15 to-transparent",
-    border: "border-white/[0.1] hover:border-pink-500/40",
+    border: "border-zinc-700/50 hover:border-pink-500/50",
     iconColor: "text-pink-400",
     iconBg: "bg-pink-500/15",
   },
@@ -60,7 +60,7 @@ const features = [
     description:
       "Understand the tone and context of every AI mention. Know when AI is recommending, criticizing, or ignoring your brand across all platforms.",
     gradient: "from-blue-500/15 to-transparent",
-    border: "border-white/[0.1] hover:border-blue-500/40",
+    border: "border-zinc-700/50 hover:border-blue-500/50",
     iconColor: "text-blue-400",
     iconBg: "bg-blue-500/15",
   },

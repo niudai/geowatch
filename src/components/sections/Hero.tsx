@@ -5,9 +5,9 @@ import { motion } from "framer-motion";
 import { ArrowRight, Sparkles, TrendingUp, Eye, Zap } from "lucide-react";
 
 const floatingBadges = [
-  { icon: Eye, label: "ChatGPT", sub: "Cited #1", color: "from-emerald-500/30 to-emerald-900/30", border: "border-emerald-500/40", iconColor: "text-emerald-400", delay: 0 },
-  { icon: TrendingUp, label: "Perplexity", sub: "+42% visibility", color: "from-cyan-500/30 to-cyan-900/30", border: "border-cyan-500/40", iconColor: "text-cyan-400", delay: 0.5 },
-  { icon: Zap, label: "Google AI", sub: "Top mention", color: "from-violet-500/30 to-violet-900/30", border: "border-violet-500/40", iconColor: "text-violet-400", delay: 1 },
+  { icon: Eye, label: "ChatGPT", sub: "Cited #1", color: "from-cyan-500/20 to-cyan-900/20", border: "border-cyan-500/50", iconColor: "text-cyan-400", delay: 0 },
+  { icon: TrendingUp, label: "Perplexity", sub: "+42% visibility", color: "from-amber-500/20 to-amber-900/20", border: "border-amber-500/40", iconColor: "text-amber-400", delay: 0.5 },
+  { icon: Zap, label: "Google AI", sub: "Top mention", color: "from-cyan-400/15 to-cyan-800/15", border: "border-cyan-400/40", iconColor: "text-cyan-300", delay: 1 },
 ];
 
 export default function Hero() {
@@ -44,27 +44,27 @@ export default function Hero() {
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
         <div className="text-center">
-          {/* Beta badge */}
+          {/* Beta badge with cyan accent */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-medium mb-8"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/40 text-cyan-300 text-xs font-medium mb-8"
           >
             <Sparkles className="w-3 h-3" aria-hidden="true" />
-            Now in Private Beta · Limited spots available
+            Now in Private Beta · 50+ Brands Tracking
           </motion.div>
 
-          {/* Main headline — SEO/GEO optimized */}
+          {/* Main headline — Data-centric, bold */}
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.05] mb-6"
           >
-            <span className="text-white">See how AI</span>
+            <span className="text-white">Your brand in</span>
             <br />
-            <span className="gradient-text">sees your brand</span>
+            <span className="gradient-text">every AI response</span>
           </motion.h1>
 
           {/* Sub-headline */}
@@ -96,11 +96,11 @@ export default function Hero() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your work email"
                   required
-                  className="flex-1 px-4 py-3 rounded-full bg-white/8 border border-white/15 text-white placeholder-white/40 text-sm focus:outline-none focus:border-emerald-500/60 focus:bg-white/10 transition-all"
+                  className="flex-1 px-4 py-3 rounded-full bg-white/8 border border-white/15 text-white placeholder-white/40 text-sm focus:outline-none focus:border-cyan-500/60 focus:bg-white/10 transition-all"
                 />
                 <button
                   type="submit"
-                  className="flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-sm font-semibold hover:opacity-90 transition-all shadow-lg shadow-emerald-500/30 whitespace-nowrap"
+                  className="flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-cyan-500 to-amber-500 text-white text-sm font-semibold hover:opacity-90 transition-all shadow-lg shadow-cyan-500/40 whitespace-nowrap"
                 >
                   Join Waitlist <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </button>
@@ -109,7 +109,7 @@ export default function Hero() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-2 px-6 py-3 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-medium"
+                className="flex items-center gap-2 px-6 py-3 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-sm font-medium"
                 role="status"
               >
                 <Sparkles className="w-4 h-4" aria-hidden="true" />
@@ -171,30 +171,33 @@ export default function Hero() {
               </div>
 
               <div className="p-6">
-                {/* Stat cards */}
+                {/* Data metric cards — cyan focused */}
                 <div className="grid grid-cols-3 gap-4 mb-5">
                   {[
-                    { label: "AI Visibility Score", value: "87", delta: "+12%", color: "text-emerald-400", bg: "border-emerald-500/20" },
-                    { label: "Prompts Tracked", value: "2,840", delta: "+8.3%", color: "text-cyan-400", bg: "border-cyan-500/20" },
-                    { label: "Citations Found", value: "1,203", delta: "+24%", color: "text-violet-400", bg: "border-violet-500/20" },
+                    { label: "AI Visibility", value: "87%", delta: "+12%", icon: "📊" },
+                    { label: "Mentions Found", value: "2.8K", delta: "+24%", icon: "🎯" },
+                    { label: "Avg. Rating", value: "4.6★", delta: "+0.3★", icon: "⭐" },
                   ].map((stat) => (
-                    <div key={stat.label} className={`bg-zinc-800 rounded-xl p-4 border ${stat.bg}`}>
-                      <div className="text-xs text-white/50 mb-2">{stat.label}</div>
-                      <div className="text-2xl font-bold text-white mb-1">{stat.value}</div>
-                      <div className={`text-xs font-medium ${stat.color}`}>{stat.delta} this week</div>
+                    <div key={stat.label} className="bg-zinc-900/60 rounded-lg p-4 border border-cyan-500/30 hover:border-cyan-500/60 transition-colors">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">{stat.icon}</span>
+                        <div className="text-xs text-white/50 uppercase tracking-wide">{stat.label}</div>
+                      </div>
+                      <div className="text-2xl font-bold text-cyan-300 mb-1 font-mono">{stat.value}</div>
+                      <div className="text-xs font-medium text-amber-400">{stat.delta} this week</div>
                     </div>
                   ))}
                 </div>
 
-                {/* Bar chart */}
-                <div className="bg-white/[0.04] rounded-xl p-4 border border-white/[0.08]">
-                  <div className="text-xs text-white/55 mb-4 font-medium">AI Platform Visibility Breakdown</div>
+                {/* Platform breakdown chart */}
+                <div className="bg-zinc-900/50 rounded-lg p-4 border border-cyan-500/20">
+                  <div className="text-xs text-white/60 mb-4 font-medium uppercase tracking-wide">Platform Breakdown</div>
                   <div className="space-y-3">
                     {[
-                      { platform: "ChatGPT", pct: 82, color: "bg-emerald-500" },
-                      { platform: "Perplexity", pct: 67, color: "bg-cyan-500" },
-                      { platform: "Google AI", pct: 71, color: "bg-violet-500" },
-                      { platform: "Claude", pct: 45, color: "bg-blue-500" },
+                      { platform: "ChatGPT", pct: 82, color: "bg-cyan-500" },
+                      { platform: "Perplexity", pct: 67, color: "bg-amber-500/80" },
+                      { platform: "Google AI", pct: 71, color: "bg-cyan-400/60" },
+                      { platform: "Claude", pct: 45, color: "bg-cyan-600/50" },
                     ].map((item) => (
                       <div key={item.platform} className="flex items-center gap-3">
                         <span className="text-xs text-white/60 w-20 shrink-0">{item.platform}</span>
