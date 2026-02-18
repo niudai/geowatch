@@ -27,40 +27,40 @@ export default function Navbar() {
       transition={{ duration: 0.5, ease: "easeOut" }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-[#050508]/90 backdrop-blur-xl border-b border-white/5"
+          ? "bg-[#050508]/90 backdrop-blur-xl border-b border-white/[0.08]"
           : "bg-transparent"
       }`}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <a href="/" className="flex items-center gap-2 group">
-            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-cyan-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Eye className="w-4 h-4 text-white" strokeWidth={2.5} />
+          <a href="/" className="flex items-center gap-2 group" aria-label="GeoWatch home">
+            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-cyan-400 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+              <Eye className="w-4 h-4 text-white" strokeWidth={2.5} aria-hidden="true" />
             </div>
             <span className="font-bold text-lg tracking-tight text-white">
               GeoWatch
             </span>
           </a>
 
-          {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-8">
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center gap-8" aria-label="Main navigation">
             {navLinks.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
-                className="text-sm text-white/60 hover:text-white transition-colors duration-200"
+                className="text-sm text-white/65 hover:text-white transition-colors duration-200"
               >
                 {link.label}
               </a>
             ))}
           </nav>
 
-          {/* CTA */}
+          {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
             <a
               href="#waitlist"
-              className="text-sm px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200"
+              className="text-sm px-4 py-2 rounded-full bg-white/[0.07] border border-white/[0.12] text-white/75 hover:bg-white/[0.12] hover:text-white transition-all duration-200"
             >
               Sign in
             </a>
@@ -72,10 +72,12 @@ export default function Navbar() {
             </a>
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile menu toggle */}
           <button
-            className="md:hidden p-2 text-white/60 hover:text-white"
+            className="md:hidden p-2 text-white/65 hover:text-white transition-colors"
             onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
           >
             {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -89,28 +91,29 @@ export default function Navbar() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-[#050508]/95 backdrop-blur-xl border-b border-white/5"
+            className="md:hidden bg-[#050508]/95 backdrop-blur-xl border-b border-white/[0.08]"
           >
-            <div className="px-4 py-4 space-y-3">
+            <nav className="px-4 py-4 space-y-1" aria-label="Mobile navigation">
               {navLinks.map((link) => (
                 <a
                   key={link.label}
                   href={link.href}
-                  className="block text-white/60 hover:text-white py-2"
+                  className="block text-white/70 hover:text-white py-2.5 text-sm font-medium"
                   onClick={() => setMenuOpen(false)}
                 >
                   {link.label}
                 </a>
               ))}
-              <div className="pt-3 border-t border-white/5 space-y-2">
+              <div className="pt-3 border-t border-white/[0.08] space-y-2 mt-2">
                 <a
                   href="#waitlist"
                   className="block text-center py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium text-sm"
+                  onClick={() => setMenuOpen(false)}
                 >
                   Join Waitlist
                 </a>
               </div>
-            </div>
+            </nav>
           </motion.div>
         )}
       </AnimatePresence>

@@ -6,15 +6,21 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "dotenv -e .env.local -- drizzle-kit push",
+    "db:studio": "dotenv -e .env.local -- drizzle-kit studio"
   },
   "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.1",
+    "@neondatabase/serverless": "^1.0.2",
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.1",
     "framer-motion": "^12.34.1",
     "lucide-react": "^0.574.0",
     "next": "16.1.6",
+    "next-auth": "5.0.0-beta.30",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.1"
@@ -24,6 +30,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.9",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
