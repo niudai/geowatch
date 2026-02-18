@@ -67,7 +67,7 @@ export default function Pricing() {
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.07] border border-white/[0.12] text-white/60 text-xs font-medium mb-5"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-medium mb-5"
           >
             <Lock className="w-3 h-3" aria-hidden="true" /> Private beta pricing
           </motion.div>
@@ -104,13 +104,13 @@ export default function Pricing() {
               transition={{ delay: i * 0.1 }}
               className={`relative rounded-2xl border p-8 ${
                 plan.featured
-                  ? "border-emerald-500/40 bg-gradient-to-b from-emerald-900/40 to-zinc-900 scale-105 shadow-xl shadow-emerald-500/15"
+                  ? "border-cyan-500/40 bg-gradient-to-b from-cyan-900/30 to-zinc-900 scale-105 shadow-xl shadow-cyan-500/20"
                   : "border-zinc-700/60 bg-zinc-900"
               }`}
             >
               {plan.badge && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-xs font-semibold shadow-lg shadow-emerald-500/20">
+                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-cyan-500 to-amber-500 text-white text-xs font-semibold shadow-lg shadow-cyan-500/30">
                     <Sparkles className="w-3 h-3" aria-hidden="true" />
                     {plan.badge}
                   </span>
@@ -120,7 +120,7 @@ export default function Pricing() {
               <div className="mb-6">
                 <div className="text-sm font-medium text-white/55 mb-1">{plan.tagline}</div>
                 <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
-                <div className={`text-sm font-medium ${plan.featured ? "text-emerald-400" : "text-white/45"}`}>
+                <div className={`text-sm font-medium ${plan.featured ? "text-cyan-400" : "text-white/45"}`}>
                   {plan.price}
                 </div>
               </div>
@@ -138,7 +138,7 @@ export default function Pricing() {
                 href="#waitlist"
                 className={`block w-full text-center py-3 rounded-full text-sm font-semibold transition-all duration-200 ${
                   plan.featured
-                    ? "bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:opacity-90 shadow-lg shadow-emerald-500/25"
+                    ? "bg-gradient-to-r from-cyan-500 to-amber-500 text-white hover:opacity-90 shadow-lg shadow-cyan-500/30"
                     : "bg-zinc-800 border border-zinc-600/60 text-white/80 hover:bg-zinc-700 hover:text-white"
                 }`}
                 aria-label={`${plan.cta} for ${plan.name} plan`}

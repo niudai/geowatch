@@ -26,9 +26,9 @@ export default function WaitlistCTA() {
           initial={{ opacity: 0, scale: 0.95 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
-          className="rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-900/35 to-zinc-900 p-10 sm:p-14 shadow-2xl shadow-emerald-500/10"
+          className="rounded-3xl border border-cyan-500/30 bg-gradient-to-b from-cyan-900/25 to-zinc-900 p-10 sm:p-14 shadow-2xl shadow-cyan-500/10"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-medium mb-6">
             <Sparkles className="w-3 h-3" aria-hidden="true" />
             Private beta — limited spots
           </div>
@@ -65,7 +65,7 @@ export default function WaitlistCTA() {
               />
               <button
                 type="submit"
-                className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-sm font-semibold hover:opacity-90 transition-all shadow-xl shadow-emerald-500/25"
+                className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-gradient-to-r from-cyan-500 to-amber-500 text-white text-sm font-semibold hover:opacity-90 transition-all shadow-xl shadow-cyan-500/30"
               >
                 Get Early Access <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </button>
@@ -74,7 +74,7 @@ export default function WaitlistCTA() {
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="inline-flex items-center gap-2 px-6 py-4 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-sm font-medium"
+              className="inline-flex items-center gap-2 px-6 py-4 rounded-full bg-cyan-500/15 border border-cyan-500/35 text-cyan-300 text-sm font-medium"
               role="status"
             >
               <Sparkles className="w-4 h-4" aria-hidden="true" />
