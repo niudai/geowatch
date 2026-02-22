@@ -1,34 +1,19 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { Eye } from 'lucide-react';
 
-export default function SignIn() {
-  const router = useRouter();
+function SignInContent() {
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const error = searchParams.get('error');
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
     setIsLoading(true);
-    setError(null);
-    try {
-      const result = await signIn('google', {
-        redirect: false,
-      });
-      if (result?.error) {
-        setError(result.error);
-      } else if (result?.ok) {
-        router.push('/dashboard');
-      }
-    } catch (err) {
-      setError('An error occurred during sign in');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+    signIn('google', { callbackUrl: '/dashboard' });
   };
 
   return (
@@ -57,7 +42,9 @@ export default function SignIn() {
           {/* Error message */}
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-              {error}
+              {error === 'OAuthAccountNotLinked'
+                ? 'This email is already associated with another sign-in method.'
+                : 'Something went wrong. Please try again.'}
             </div>
           )}
 
@@ -126,5 +113,13 @@ export default function SignIn() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignIn() {
+  return (
+    <Suspense>
+      <SignInContent />
+    </Suspense>
   );
 }
