@@ -10,12 +10,15 @@
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "agent:listen": "node scripts/agent-listener.js",
-    "agent:test": "echo '{\"customer_id\":\"test-001\",\"customer_name\":\"Test Customer\",\"message\":\"This is a test message. Is GeoWatch working?\",\"timestamp\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\"}' > /tmp/geowatch-messages/message-test-$(date +%s).json"
+    "agent:test": "echo '{\"customer_id\":\"test-001\",\"customer_name\":\"Test Customer\",\"message\":\"This is a test message. Is GeoWatch working?\",\"timestamp\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\"}' > /tmp/geowatch-messages/message-test-$(date +%s).json",
+    "monitor:deploy": "tsx scripts/monitor-deployment.ts",
+    "watch:deploy": "bash scripts/watch-deployment.sh"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
     "@neondatabase/serverless": "^1.0.2",
     "@radix-ui/react-slot": "^1.2.4",
+    "axios": "^1.13.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
@@ -25,7 +28,8 @@
     "next-auth": "5.0.0-beta.30",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tailwind-merge": "^3.4.1"
+    "tailwind-merge": "^3.4.1",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -37,6 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
