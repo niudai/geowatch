@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
-    "db:studio": "dotenv -e .env.local -- drizzle-kit studio"
+    "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
+    "agent:listen": "node scripts/agent-listener.js",
+    "agent:test": "echo '{\"customer_id\":\"test-001\",\"customer_name\":\"Test Customer\",\"message\":\"This is a test message. Is GeoWatch working?\",\"timestamp\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\"}' > /tmp/geowatch-messages/message-test-$(date +%s).json"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
