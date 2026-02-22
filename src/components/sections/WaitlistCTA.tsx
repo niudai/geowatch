@@ -1,20 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function WaitlistCTA() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (email) setSubmitted(true);
-  };
-
   return (
-    <section id="waitlist" className="py-24 relative overflow-hidden" aria-labelledby="waitlist-heading">
+    <section id="waitlist" className="py-24 relative overflow-hidden" aria-labelledby="cta-heading">
       {/* Background glow */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-950/25 to-transparent" />
@@ -26,61 +17,41 @@ export default function WaitlistCTA() {
           initial={{ opacity: 0, scale: 0.95 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
-          className="rounded-3xl border border-cyan-500/30 bg-gradient-to-b from-cyan-900/25 to-zinc-900 p-10 sm:p-14 shadow-2xl shadow-cyan-500/10"
+          className="rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-900/25 to-zinc-900 p-10 sm:p-14 shadow-2xl shadow-emerald-500/10"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-6">
             <Sparkles className="w-3 h-3" aria-hidden="true" />
-            Private beta — limited spots
+            Now open for all users · Join 500+ brands
           </div>
 
           <h2
-            id="waitlist-heading"
+            id="cta-heading"
             className="text-4xl sm:text-5xl font-bold text-white mb-4 tracking-tight"
           >
-            Your competitors are already
+            Ready to see where you rank in
             <br />
-            <span className="gradient-text">winning AI search</span>
+            <span className="gradient-text">AI search results?</span>
           </h2>
 
           <p className="text-white/65 text-lg mb-10 max-w-lg mx-auto leading-relaxed">
-            Every day without GeoWatch is another day they capture your customers.
-            Join the waitlist and be first to know when we open up.
+            Start monitoring your brand across ChatGPT, Perplexity, Google AI Overviews, and more.
+            No credit card required. Free during beta.
           </p>
 
-          {!submitted ? (
-            <form
-              onSubmit={handleSubmit}
-              className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
-              aria-label="Waitlist signup"
+          <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-lg mx-auto">
+            <a
+              href="/dashboard"
+              className="flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-semibold hover:opacity-90 transition-all shadow-xl shadow-emerald-500/30 whitespace-nowrap"
             >
-              <label htmlFor="cta-email" className="sr-only">Work email address</label>
-              <input
-                id="cta-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your work email"
-                required
-                className="flex-1 px-5 py-3.5 rounded-full bg-white/[0.08] border border-white/[0.15] text-white placeholder-white/40 text-sm focus:outline-none focus:border-emerald-500/60 focus:bg-white/10 transition-all"
-              />
-              <button
-                type="submit"
-                className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-gradient-to-r from-cyan-500 to-amber-500 text-white text-sm font-semibold hover:opacity-90 transition-all shadow-xl shadow-cyan-500/30"
-              >
-                Get Early Access <ArrowRight className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </form>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="inline-flex items-center gap-2 px-6 py-4 rounded-full bg-cyan-500/15 border border-cyan-500/35 text-cyan-300 text-sm font-medium"
-              role="status"
+              Start Free Trial <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </a>
+            <a
+              href="/signin"
+              className="px-8 py-3.5 rounded-full bg-white/[0.08] border border-white/[0.15] text-white font-semibold hover:bg-white/[0.12] transition-all whitespace-nowrap"
             >
-              <Sparkles className="w-4 h-4" aria-hidden="true" />
-              You&apos;re on the list! We&apos;ll reach out within 48 hours.
-            </motion.div>
-          )}
+              Sign In
+            </a>
+          </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-5 text-xs text-white/45">
             <span>✓ No credit card</span>

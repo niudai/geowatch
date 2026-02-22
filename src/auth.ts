@@ -11,6 +11,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }),
+  pages: {
+    signIn: '/signin',
+  },
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,

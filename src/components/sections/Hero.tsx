@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Sparkles, TrendingUp, Eye, Zap } from "lucide-react";
+import { ArrowRight, TrendingUp, Eye, Zap } from "lucide-react";
 
 const floatingBadges = [
   { icon: Eye, label: "ChatGPT", sub: "Cited #1", color: "from-cyan-500/20 to-cyan-900/20", border: "border-cyan-500/50", iconColor: "text-cyan-400", delay: 0 },
@@ -11,13 +10,6 @@ const floatingBadges = [
 ];
 
 export default function Hero() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (email) setSubmitted(true);
-  };
 
   return (
     <section
@@ -79,43 +71,25 @@ export default function Hero() {
             before they do.
           </motion.p>
 
-          {/* Email waitlist form */}
+          {/* CTA buttons */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto mb-4"
+            className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-lg mx-auto mb-4"
           >
-            {!submitted ? (
-              <form onSubmit={handleSubmit} className="flex w-full gap-2" aria-label="Waitlist signup form">
-                <label htmlFor="hero-email" className="sr-only">Work email address</label>
-                <input
-                  id="hero-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your work email"
-                  required
-                  className="flex-1 px-4 py-3 rounded-full bg-white/8 border border-white/15 text-white placeholder-white/40 text-sm focus:outline-none focus:border-cyan-500/60 focus:bg-white/10 transition-all"
-                />
-                <button
-                  type="submit"
-                  className="flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-cyan-500 to-amber-500 text-white text-sm font-semibold hover:opacity-90 transition-all shadow-lg shadow-cyan-500/40 whitespace-nowrap"
-                >
-                  Join Waitlist <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                </button>
-              </form>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-2 px-6 py-3 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-sm font-medium"
-                role="status"
-              >
-                <Sparkles className="w-4 h-4" aria-hidden="true" />
-                You&apos;re on the list! We&apos;ll be in touch soon.
-              </motion.div>
-            )}
+            <a
+              href="/dashboard"
+              className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-semibold hover:opacity-90 transition-all shadow-lg shadow-emerald-500/40 whitespace-nowrap"
+            >
+              Start Free Trial <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </a>
+            <a
+              href="/signin"
+              className="px-6 py-3 rounded-full bg-white/10 border border-white/20 text-white font-semibold hover:bg-white/15 transition-all whitespace-nowrap"
+            >
+              Sign In
+            </a>
           </motion.div>
 
           <motion.p
