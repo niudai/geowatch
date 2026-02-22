@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, TrendingUp, Eye, Zap } from "lucide-react";
+import { ArrowRight, TrendingUp, Eye, Zap, Sparkles } from "lucide-react";
 
 const floatingBadges = [
   { icon: Eye, label: "ChatGPT", sub: "Cited #1", color: "from-cyan-500/20 to-cyan-900/20", border: "border-cyan-500/50", iconColor: "text-cyan-400", delay: 0 },
