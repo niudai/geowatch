@@ -4,12 +4,13 @@ import { apps, keywords, monitoringResults, monitoringTasks } from '@/lib/schema
 import { eq, and } from 'drizzle-orm';
 import { queryGoogleAIMode, queryChatGPT, generateQueries, detectMention } from '@/lib/monitoring';
 
-export async function POST(req: Request, { params }: { params: { appId: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ appId: string }> }) {
+  const { appId } = await params;
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   // Verify ownership
-  const app = await db.select().from(apps).where(eq(apps.id, params.appId)).limit(1);
+  const app = await db.select().from(apps).where(eq(apps.id, appId)).limit(1);
   if (!app[0] || app[0].userId !== session.user.id) {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -18,7 +19,7 @@ export async function POST(req: Request, { params }: { params: { appId: string }
   const appKeywords = await db
     .select()
     .from(keywords)
-    .where(and(eq(keywords.appId, params.appId), eq(keywords.status, 'active')));
+    .where(and(eq(keywords.appId, appId), eq(keywords.status, 'active')));
 
   const results = [];
 
@@ -34,7 +35,7 @@ export async function POST(req: Request, { params }: { params: { appId: string }
         const [savedGoogleResult] = await db
           .insert(monitoringResults)
           .values({
-            appId: params.appId,
+            appId,
             keywordId: kw.id,
             source: 'google_ai_mode',
             queryText: query,
@@ -56,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { appId: string }
         const [savedChatResult] = await db
           .insert(monitoringResults)
           .values({
-            appId: params.appId,
+            appId,
             keywordId: kw.id,
             source: 'chatgpt',
             queryText: query,
