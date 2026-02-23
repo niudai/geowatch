@@ -1,7 +1,10 @@
 import axios from 'axios';
+import puppeteer from 'puppeteer-core';
 
 const OXYLABS_API = 'https://realtime.oxylabs.io/v1/queries';
-const GEELARK_API = 'https://api.geelark.com';
+
+// CDP ports to try when connecting to local anti-detect browser
+const CDP_PORTS = [9222, 9223, 9224, 9225, 9226];
 
 // Types
 export interface MonitoringResult {
@@ -35,16 +38,13 @@ export async function queryGoogleAIMode(query: string): Promise<MonitoringResult
       OXYLABS_API,
       {
         source: 'google_ai_mode',
-        query: query.substring(0, 400), // API limit
+        query: query.substring(0, 400),
         render: 'html',
         parse: true,
       },
       {
-        auth: {
-          username,
-          password,
-        },
-        timeout: 120000, // 2 min timeout
+        auth: { username, password },
+        timeout: 120000,
       }
     );
 
@@ -81,167 +81,289 @@ export async function queryGoogleAIMode(query: string): Promise<MonitoringResult
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// ChatGPT (via Geelark)
+// ChatGPT (via local anti-detect browser + Puppeteer CDP)
 // ─────────────────────────────────────────────────────────────────────────
 
-let cachedProfile: { id: string } | null = null;
-
-async function getOrCreateProfile(): Promise<string> {
-  const token = process.env.GEELARK_BEARER_TOKEN;
-  if (!token) throw new Error('Geelark token not configured');
-
-  // Reuse profile to save time
-  if (cachedProfile) {
-    return cachedProfile.id;
-  }
-
-  try {
-    const response = await axios.post(
-      `${GEELARK_API}/v1/profiles`,
-      {
-        name: `geowatch-monitor-${Date.now()}`,
-        browser: 'chromium',
-      },
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    cachedProfile = response.data;
-    return response.data.id;
-  } catch (error) {
-    console.error('[Geelark] Profile creation failed:', error);
-    throw error;
-  }
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-async function launchSession(profileId: string): Promise<{ id: string; wsUrl: string }> {
-  const token = process.env.GEELARK_BEARER_TOKEN;
-  if (!token) throw new Error('Geelark token not configured');
+// Wait for ChatGPT response to finish streaming
+async function waitForChatGPTResponse(page: any, timeoutMs = 180000): Promise<string> {
+  const startTime = Date.now();
 
-  const response = await axios.post(
-    `${GEELARK_API}/v1/sessions`,
-    {
-      profile_id: profileId,
-      timeout: 120,
-    },
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
-
-  return {
-    id: response.data.id,
-    wsUrl: response.data.ws_url,
-  };
-}
-
-async function closeSession(sessionId: string): Promise<void> {
-  const token = process.env.GEELARK_BEARER_TOKEN;
-  if (!token) return;
-
-  try {
-    await axios.delete(`${GEELARK_API}/v1/sessions/${sessionId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-  } catch (error) {
-    console.error('[Geelark] Session close failed:', error);
-  }
-}
-
-interface WSMessage {
-  method: string;
-  params?: Record<string, any>;
-}
-
-function sendWSMessage(ws: any, message: WSMessage): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('WS message timeout'));
-    }, 10000);
-
-    const handler = (data: any) => {
-      clearTimeout(timeout);
-      ws.removeListener('message', handler);
-      try {
-        resolve(JSON.parse(data));
-      } catch {
-        resolve(data);
-      }
-    };
-
-    ws.on('message', handler);
-    ws.send(JSON.stringify(message));
+  await page.waitForSelector('[data-message-author-role="assistant"]', {
+    timeout: timeoutMs,
   });
+
+  let lastLength = 0;
+  let stableCount = 0;
+  while (Date.now() - startTime < timeoutMs) {
+    const isStreaming = await page.evaluate(() => {
+      return !!document.querySelector('button[aria-label="Stop generating"]');
+    });
+
+    if (!isStreaming) {
+      const currentLength = await page.evaluate(() => {
+        const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
+        if (msgs.length === 0) return 0;
+        return msgs[msgs.length - 1]?.textContent?.length || 0;
+      });
+
+      if (currentLength === lastLength && currentLength > 0) {
+        stableCount++;
+        if (stableCount >= 5) break;
+      } else {
+        stableCount = 0;
+      }
+      lastLength = currentLength;
+    }
+
+    await sleep(500);
+  }
+
+  await sleep(1500);
+
+  const responseText = await page.evaluate(() => {
+    const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
+    if (messages.length === 0) return '';
+    return messages[messages.length - 1]?.textContent?.trim() || '';
+  });
+
+  return responseText;
+}
+
+// Extract cited sources from ChatGPT response
+// Strategy: extract inline citation pills (data-testid="webpage-citation-pill") directly,
+// then click Sources to open the side panel and extract full links from there.
+async function extractChatGPTSources(
+  page: any,
+  conversationUrl: string,
+  connectPort: number
+): Promise<Array<{ text: string; url: string; domain: string }>> {
+  // Scroll to bottom of response to ensure all citations are rendered
+  await page.evaluate(() => {
+    const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
+    if (msgs.length > 0) msgs[msgs.length - 1].scrollIntoView({ block: 'end', behavior: 'smooth' });
+  });
+  await sleep(1500);
+
+  // Strategy 1: Extract inline citation pill links directly from the response
+  // These have data-testid="webpage-citation-pill" and contain <a href="..."> tags
+  let sources = await page.evaluate(() => {
+    const results: Array<{ text: string; url: string; domain: string }> = [];
+    const seen = new Set<string>();
+    const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
+    if (msgs.length === 0) return results;
+    const lastMsg = msgs[msgs.length - 1];
+
+    // Get citation pills
+    lastMsg.querySelectorAll('[data-testid="webpage-citation-pill"] a[href^="http"]').forEach((a: any) => {
+      const url = (a.getAttribute('href') || '').replace(/[?&]utm_source=chatgpt\.com/, '');
+      let hostname = '';
+      try { hostname = new URL(url).hostname; } catch { return; }
+      if (hostname.includes('chatgpt.com') || hostname.includes('openai.com')) return;
+      if (!seen.has(hostname)) {
+        seen.add(hostname);
+        const text = a.textContent?.trim()?.replace(/\+\d+$/, '').trim() || hostname;
+        results.push({ text: text.substring(0, 120), url, domain: hostname });
+      }
+    });
+
+    return results;
+  });
+
+  if (sources.length > 0) {
+    console.log(`[ChatGPT] Extracted ${sources.length} sources from inline citation pills`);
+    return sources;
+  }
+
+  // Strategy 2: Click Sources button and extract from the side panel
+  const hasBtn = await page.evaluate(() => {
+    const btn = document.querySelector('button[aria-label="Sources"]') as HTMLElement;
+    if (btn) { btn.click(); return true; }
+    return false;
+  });
+
+  if (!hasBtn) {
+    // Strategy 3: Fallback — extract domains from favicon images
+    return page.evaluate(() => {
+      const results: Array<{ text: string; url: string; domain: string }> = [];
+      const seen = new Set<string>();
+      document.querySelectorAll('img[src*="s2/favicons"]').forEach((img: any) => {
+        const src = img.getAttribute('src') || '';
+        const match = src.match(/domain=([^&]+)/);
+        if (match) {
+          const domain = match[1].replace('https://', '').replace('http://', '');
+          if (!seen.has(domain)) {
+            seen.add(domain);
+            results.push({ text: domain, url: `https://${domain}`, domain });
+          }
+        }
+      });
+      return results;
+    });
+  }
+
+  // Wait for the side panel to render with links
+  for (let i = 0; i < 16; i++) {
+    await sleep(500);
+    const count = await page.evaluate(() => {
+      // The side panel is a div positioned on the right, not a [role="dialog"]
+      // Look for external links anywhere on page that weren't in the message area
+      const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
+      const msgEl = msgs.length ? msgs[msgs.length - 1] : null;
+      let total = 0;
+      document.querySelectorAll('a[href^="http"]').forEach((a: any) => {
+        if (msgEl && msgEl.contains(a)) return; // skip links inside message
+        try {
+          const h = new URL(a.getAttribute('href') || '').hostname;
+          if (!h.includes('chatgpt.com') && !h.includes('openai.com') && !h.includes('oaiusercontent') && !h.includes('auth0.com')) total++;
+        } catch {}
+      });
+      return total;
+    });
+    if (count > 0) break;
+  }
+
+  // Extract links from the side panel (any external links NOT inside the assistant message)
+  sources = await page.evaluate(() => {
+    const results: Array<{ text: string; url: string; domain: string }> = [];
+    const seen = new Set<string>();
+    const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
+    const msgEl = msgs.length ? msgs[msgs.length - 1] : null;
+
+    document.querySelectorAll('a[href^="http"]').forEach((a: any) => {
+      if (msgEl && msgEl.contains(a)) return;
+      let url = a.getAttribute('href') || '';
+      let hostname = '';
+      try { hostname = new URL(url).hostname; } catch { return; }
+      if (hostname.includes('chatgpt.com') || hostname.includes('openai.com') ||
+          hostname.includes('oaiusercontent') || hostname.includes('auth0.com')) return;
+      url = url.replace(/[?&]utm_source=chatgpt\.com/, '');
+      if (!seen.has(url)) {
+        seen.add(url);
+        const text = a.textContent?.trim() || '';
+        results.push({ text: text.substring(0, 120), url, domain: hostname });
+      }
+    });
+
+    return results;
+  });
+
+  // Close the panel
+  await page.evaluate(() => {
+    const btn = document.querySelector('button[aria-label="Sources"]') as HTMLElement;
+    if (btn) btn.click();
+  });
+  await sleep(300);
+
+  console.log(`[ChatGPT] Extracted ${sources.length} sources from side panel`);
+  return sources;
 }
 
 export async function queryChatGPT(query: string): Promise<MonitoringResult> {
-  const WebSocket = require('ws');
+  let browser: any = null;
+  let page: any = null;
+  let connectedPort = 9222;
 
   try {
     console.log(`[ChatGPT] Querying: "${query}"`);
 
-    // Get or create profile
-    const profileId = await getOrCreateProfile();
-
-    // Launch session
-    const session = await launchSession(profileId);
-
-    // Connect WebSocket
-    const ws = new WebSocket(session.wsUrl);
-    await new Promise((resolve) => ws.once('open', resolve));
-
-    try {
-      // Navigate to ChatGPT
-      await sendWSMessage(ws, {
-        method: 'Page.navigate',
-        params: { url: 'https://chatgpt.com' },
-      });
-
-      // Wait for UI
-      await new Promise((r) => setTimeout(r, 3000));
-
-      // Find textarea and type query
-      await sendWSMessage(ws, {
-        method: 'Input.insertText',
-        params: {
-          text: query,
-          selector: 'textarea[placeholder*="Message"], textarea[data-placeholder*="message"]',
-        },
-      });
-
-      // Press Enter
-      await sendWSMessage(ws, {
-        method: 'Input.press',
-        params: { key: 'Enter' },
-      });
-
-      // Wait for response
-      await new Promise((r) => setTimeout(r, 5000));
-
-      // Get page content
-      const contentMsg = await sendWSMessage(ws, {
-        method: 'Page.getContent',
-        params: {},
-      });
-
-      const html = contentMsg.result?.content || '';
-
-      // Extract AI response (simple heuristic)
-      // In production, use Claude to parse HTML
-      const responseMatch = html.match(/<div[^>]*role="article"[^>]*>([\s\S]*?)<\/div>/);
-      const response = responseMatch ? responseMatch[1] : '';
-
-      return {
-        source: 'chatgpt',
-        query,
-        response: response.substring(0, 5000), // Limit size
-        mentioned: response.length > 0,
-      };
-    } finally {
-      ws.close();
-      await closeSession(session.id);
+    // 1. Connect to local browser
+    for (const port of CDP_PORTS) {
+      try {
+        browser = await puppeteer.connect({
+          browserURL: `http://127.0.0.1:${port}`,
+          protocolTimeout: 60000,
+        });
+        connectedPort = port;
+        console.log(`[ChatGPT] Connected on port ${port}`);
+        break;
+      } catch {}
     }
+    if (!browser) {
+      throw new Error('No local browser found. Launch with: pnpm tsx scripts/open-browser-profile.ts');
+    }
+
+    // 2. Open new tab
+    page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+
+    // 3. Navigate to ChatGPT
+    console.log('[ChatGPT] Navigating to chatgpt.com...');
+    await page.goto('https://chatgpt.com', {
+      waitUntil: 'networkidle2',
+      timeout: 60000,
+    });
+
+    // Check login status
+    await sleep(2000);
+    const isLoggedIn = await page.evaluate(() => {
+      const loginBtn = Array.from(document.querySelectorAll('button, a')).find(
+        (el) => el.textContent?.trim() === 'Log in'
+      );
+      return !loginBtn;
+    });
+    if (!isLoggedIn) {
+      throw new Error('Not logged in to ChatGPT. Run open-browser-profile.ts and login first.');
+    }
+
+    // 4. Type and submit query
+    const textareaSelector = '#prompt-textarea, div[contenteditable="true"][id="prompt-textarea"]';
+    await page.waitForSelector(textareaSelector, { timeout: 15000 });
+    await page.click(textareaSelector);
+    await page.type(textareaSelector, query, { delay: 15 });
+    await sleep(500);
+    await page.keyboard.press('Enter');
+    console.log('[ChatGPT] Query submitted, waiting for response...');
+
+    // 5. Wait for response
+    const responseText = await waitForChatGPTResponse(page, 180000);
+    console.log(`[ChatGPT] Response: ${responseText.length} chars`);
+
+    // 6. Extract sources (with reconnection fallback)
+    const conversationUrl = page.url();
+    let sources = await extractChatGPTSources(page, conversationUrl, connectedPort);
+
+    if (sources.length === 0 && conversationUrl.includes('/c/')) {
+      console.log('[ChatGPT] Retrying source extraction via reconnection...');
+      // Close the page before disconnecting to avoid orphan tabs
+      try { await page.close(); } catch {}
+      page = null;
+      browser.disconnect();
+      await sleep(1000);
+
+      browser = await puppeteer.connect({
+        browserURL: `http://127.0.0.1:${connectedPort}`,
+        protocolTimeout: 60000,
+      });
+      const allPages = await browser.pages();
+      const targetPage = allPages.find((p: any) => p.url() === conversationUrl);
+      if (targetPage) {
+        page = targetPage; // Track for cleanup
+        sources = await extractChatGPTSources(targetPage, conversationUrl, connectedPort);
+      }
+    }
+
+    console.log(`[ChatGPT] Sources: ${sources.length}`);
+
+    // 7. Close the conversation tab
+    try {
+      if (page && !page.isClosed()) await page.close();
+      page = null;
+    } catch {}
+
+    // Convert sources to links format
+    const links = sources.map((s) => ({ text: s.text, url: s.url, domain: s.domain }));
+
+    return {
+      source: 'chatgpt',
+      query,
+      response: responseText.substring(0, 10000),
+      mentioned: responseText.length > 0,
+      links,
+    };
   } catch (error) {
     console.error('[ChatGPT] Error:', error);
     return {
@@ -251,23 +373,19 @@ export async function queryChatGPT(query: string): Promise<MonitoringResult> {
       mentioned: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
+  } finally {
+    // Always close the tab to prevent tab accumulation
+    if (page) {
+      try {
+        if (!page.isClosed()) await page.close();
+      } catch {}
+    }
+    if (browser) {
+      try {
+        browser.disconnect();
+      } catch {}
+    }
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Keyword expansion (generate related queries)
-// ─────────────────────────────────────────────────────────────────────────
-
-export function generateQueries(keyword: string): string[] {
-  const templates = [
-    `what is ${keyword}`,
-    `${keyword} vs alternatives`,
-    `${keyword} features and benefits`,
-    `best ${keyword}`,
-    `${keyword} reviews`,
-  ];
-
-  return templates.map((t) => t.replace(/\s+/g, ' ').trim());
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -282,20 +400,13 @@ export function detectMention(response: string, brandName: string): {
   const lowerBrand = brandName.toLowerCase();
 
   if (lowerResponse.includes(lowerBrand)) {
-    // Extract surrounding context
     const idx = lowerResponse.indexOf(lowerBrand);
     const start = Math.max(0, idx - 100);
     const end = Math.min(response.length, idx + lowerBrand.length + 100);
     const text = response.substring(start, end);
 
-    return {
-      mentioned: true,
-      text,
-    };
+    return { mentioned: true, text };
   }
 
-  return {
-    mentioned: false,
-    text: '',
-  };
+  return { mentioned: false, text: '' };
 }

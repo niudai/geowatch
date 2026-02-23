@@ -1,4 +1,4 @@
-import { Eye } from "lucide-react";
+import BrandIcon from "./BrandIcon";
 
 export default function Footer() {
   return (
@@ -7,9 +7,7 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-cyan-400 flex items-center justify-center shadow-md shadow-emerald-500/20">
-              <Eye className="w-3.5 h-3.5 text-white" strokeWidth={2.5} aria-hidden="true" />
-            </div>
+            <BrandIcon size={26} />
             <span className="font-bold text-white">GeoWatch</span>
           </div>
 
