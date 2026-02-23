@@ -2,7 +2,6 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { apps, keywords } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
-import { canCreateApp } from '@/lib/subscription';
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -19,12 +18,6 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
-  // Check app creation limit
-  const limitCheck = await canCreateApp(session.user.id);
-  if (!limitCheck.allowed) {
-    return Response.json({ error: limitCheck.reason, code: 'LIMIT_EXCEEDED' }, { status: 403 });
-  }
 
   const body = await req.json();
   const { name, description, domain, productProfile, keywords: keywordList } = body;

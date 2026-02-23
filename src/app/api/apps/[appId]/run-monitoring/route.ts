@@ -4,7 +4,6 @@ import { apps, keywords, monitoringResults, monitoringTasks } from '@/lib/schema
 import { eq, and, count } from 'drizzle-orm';
 import { queryGoogleAIMode, queryChatGPT, detectMention } from '@/lib/monitoring';
 import { getUserSubscription, isActiveSubscription } from '@/lib/subscription';
-import { FREE_LIMITS } from '@/lib/plans';
 
 export async function POST(req: Request, { params }: { params: Promise<{ appId: string }> }) {
   const { appId } = await params;
@@ -17,13 +16,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ appId: 
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Check subscription — paid users must have active subscription
+  // Check subscription — must have active/trialing subscription to run monitoring
   const sub = await getUserSubscription(session.user.id);
-  if (sub?.plan && !isActiveSubscription(sub.status)) {
-    return Response.json(
-      { error: 'Your subscription is inactive. Please update your billing to continue monitoring.', code: 'SUBSCRIPTION_INACTIVE' },
-      { status: 403 }
-    );
+  if (!sub?.plan || !isActiveSubscription(sub.status)) {
+    const code = sub?.plan ? 'SUBSCRIPTION_INACTIVE' : 'SUBSCRIPTION_REQUIRED';
+    const error = sub?.plan
+      ? 'Your subscription is inactive. Please update your billing to continue monitoring.'
+      : 'A subscription is required to run monitoring. Please subscribe to get started.';
+    return Response.json({ error, code }, { status: 403 });
   }
 
   // Get all keywords

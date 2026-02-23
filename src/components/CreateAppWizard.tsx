@@ -6,7 +6,6 @@ import type { ProductProfile } from '@/lib/types';
 interface CreateAppWizardProps {
   onComplete: (appId: string) => void;
   onCancel: () => void;
-  onLimitExceeded?: (reason: string) => void;
 }
 
 const STEPS = ['Product Name', 'Website URL', 'Analyzing', 'Review & Edit', 'Creating'];
@@ -104,7 +103,7 @@ function EditableCompetitors({
   );
 }
 
-export default function CreateAppWizard({ onComplete, onCancel, onLimitExceeded }: CreateAppWizardProps) {
+export default function CreateAppWizard({ onComplete, onCancel }: CreateAppWizardProps) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -167,18 +166,10 @@ export default function CreateAppWizard({ onComplete, onCancel, onLimitExceeded 
 
       if (!res.ok) {
         const data = await res.json();
-        if (data.code === 'LIMIT_EXCEEDED' && onLimitExceeded) {
-          onLimitExceeded(data.error);
-          return;
-        }
         throw new Error(data.error || 'Failed to create app');
       }
 
       const newApp = await res.json();
-
-      // Fire-and-forget: trigger first monitoring
-      fetch(`/api/apps/${newApp.id}/run-monitoring`, { method: 'POST' }).catch(() => {});
-
       onComplete(newApp.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create app');

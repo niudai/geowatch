@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import CreateAppWizard from '@/components/CreateAppWizard';
-import SubscribeModal from '@/components/SubscribeModal';
 import { useSubscription } from '@/hooks/useSubscription';
 
 interface App {
@@ -22,8 +21,6 @@ export default function DashboardContent() {
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
-  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
-  const [subscribeReason, setSubscribeReason] = useState('');
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const { subscription, loading: subLoading, refresh: refreshSubscription } = useSubscription();
 
@@ -66,12 +63,6 @@ export default function DashboardContent() {
     setShowWizard(true);
   }
 
-  function handleLimitExceeded(reason: string) {
-    setShowWizard(false);
-    setSubscribeReason(reason);
-    setShowSubscribeModal(true);
-  }
-
   async function handleManageBilling() {
     try {
       const res = await fetch('/api/stripe/portal', { method: 'POST' });
@@ -105,7 +96,7 @@ export default function DashboardContent() {
             <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            Subscription activated! You can now create more apps and keywords.
+            Subscription activated! You can now run monitoring on your apps.
           </div>
         )}
 
@@ -199,17 +190,8 @@ export default function DashboardContent() {
             router.push(`/dashboard/${appId}`);
           }}
           onCancel={() => setShowWizard(false)}
-          onLimitExceeded={handleLimitExceeded}
         />
       )}
-
-      {/* Subscribe Modal */}
-      <SubscribeModal
-        open={showSubscribeModal}
-        onClose={() => setShowSubscribeModal(false)}
-        reason={subscribeReason}
-        hasUsedTrial={subscription?.hasUsedTrial ?? false}
-      />
     </div>
   );
 }

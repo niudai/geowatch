@@ -15,8 +15,6 @@ export const PLANS = {
 
 export type PlanKey = keyof typeof PLANS
 
-export const FREE_LIMITS = { maxApps: 1, maxKeywordsPerApp: 3 }
-
 export const TRIAL_DAYS = 3
 
 export function getPlanByPriceId(priceId: string): PlanKey | null {

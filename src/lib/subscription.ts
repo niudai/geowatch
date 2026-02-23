@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
-import { users, subscriptions, apps, keywords } from '@/lib/schema'
-import { eq, and, count } from 'drizzle-orm'
-import { PLANS, FREE_LIMITS, type PlanKey } from '@/lib/plans'
+import { users, subscriptions } from '@/lib/schema'
+import { eq } from 'drizzle-orm'
+import { type PlanKey } from '@/lib/plans'
 
 export async function getUserSubscription(userId: string) {
   const [user] = await db
@@ -31,53 +31,6 @@ export async function getUserSubscription(userId: string) {
     stripeCustomerId: user.stripeCustomerId,
     hasUsedTrial: user.hasUsedTrial,
   }
-}
-
-export function getLimits(plan: PlanKey | undefined) {
-  if (!plan) return FREE_LIMITS
-  return PLANS[plan]?.limits ?? FREE_LIMITS
-}
-
-export async function canCreateApp(userId: string): Promise<{ allowed: boolean; reason?: string }> {
-  const sub = await getUserSubscription(userId)
-  const limits = getLimits(sub?.plan && (sub.status === 'active' || sub.status === 'trialing') ? sub.plan : undefined)
-
-  const [result] = await db
-    .select({ count: count() })
-    .from(apps)
-    .where(eq(apps.userId, userId))
-
-  const appCount = result?.count ?? 0
-
-  if (appCount >= limits.maxApps) {
-    return {
-      allowed: false,
-      reason: `You've reached the limit of ${limits.maxApps} app${limits.maxApps === 1 ? '' : 's'} on your ${sub?.plan ? PLANS[sub.plan].name : 'Free'} plan. Upgrade to create more.`,
-    }
-  }
-
-  return { allowed: true }
-}
-
-export async function canAddKeyword(appId: string, userId: string): Promise<{ allowed: boolean; reason?: string }> {
-  const sub = await getUserSubscription(userId)
-  const limits = getLimits(sub?.plan && (sub.status === 'active' || sub.status === 'trialing') ? sub.plan : undefined)
-
-  const [result] = await db
-    .select({ count: count() })
-    .from(keywords)
-    .where(eq(keywords.appId, appId))
-
-  const kwCount = result?.count ?? 0
-
-  if (kwCount >= limits.maxKeywordsPerApp) {
-    return {
-      allowed: false,
-      reason: `You've reached the limit of ${limits.maxKeywordsPerApp} keywords per app on your ${sub?.plan ? PLANS[sub.plan].name : 'Free'} plan. Upgrade to add more.`,
-    }
-  }
-
-  return { allowed: true }
 }
 
 export function isActiveSubscription(status: string | undefined): boolean {

@@ -28,10 +28,10 @@ export async function GET(req: Request) {
   const errors: string[] = [];
 
   for (const app of allApps) {
-    // Skip apps whose owners have inactive paid subscriptions
+    // Skip apps whose owners don't have an active subscription
     const sub = await getUserSubscription(app.userId);
-    if (sub?.plan && !isActiveSubscription(sub.status)) {
-      console.log(`[Cron] Skipping app "${app.name}" — subscription inactive (${sub.status})`);
+    if (!sub?.plan || !isActiveSubscription(sub.status)) {
+      console.log(`[Cron] Skipping app "${app.name}" — no active subscription (${sub?.status ?? 'none'})`);
       continue;
     }
 

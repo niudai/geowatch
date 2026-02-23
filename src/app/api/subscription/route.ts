@@ -2,7 +2,8 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { apps } from '@/lib/schema'
 import { eq, count } from 'drizzle-orm'
-import { getUserSubscription, getLimits } from '@/lib/subscription'
+import { getUserSubscription, isActiveSubscription } from '@/lib/subscription'
+import { PLANS } from '@/lib/plans'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,10 +15,10 @@ export async function GET() {
 
   const sub = await getUserSubscription(session.user.id)
 
-  const activePlan = sub?.plan && (sub.status === 'active' || sub.status === 'trialing')
+  const activePlan = sub?.plan && isActiveSubscription(sub.status)
     ? sub.plan
     : undefined
-  const limits = getLimits(activePlan)
+  const limits = activePlan ? PLANS[activePlan].limits : { maxApps: 0, maxKeywordsPerApp: 0 }
 
   const [appCount] = await db
     .select({ count: count() })

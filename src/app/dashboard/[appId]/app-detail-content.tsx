@@ -5,7 +5,6 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
-import SubscribeModal from '@/components/SubscribeModal';
 import { useSubscription } from '@/hooks/useSubscription';
 
 interface App {
@@ -340,6 +339,57 @@ function SourceCard({
   );
 }
 
+// Paywall banner for non-subscribers
+function PaywallBanner({ hasUsedTrial, onSubscribe }: { hasUsedTrial: boolean; onSubscribe: (plan: 'pro' | 'business') => void }) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClick(plan: 'pro' | 'business') {
+    setLoading(plan);
+    setError(null);
+    onSubscribe(plan);
+  }
+
+  return (
+    <div className="mb-8 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-900/20 via-zinc-900 to-cyan-900/20 p-6">
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <svg className="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-white">Start monitoring your brand</h3>
+          </div>
+          <p className="text-sm text-white/55 mb-1">
+            Subscribe to track your brand visibility across AI search engines.
+          </p>
+          {!hasUsedTrial && (
+            <span className="inline-block mt-1 px-2.5 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full text-[11px] font-medium text-emerald-400">
+              3-day free trial included
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => handleClick('pro')}
+            disabled={loading !== null}
+            className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition text-sm disabled:opacity-50"
+          >
+            {loading === 'pro' ? 'Redirecting...' : 'Start Free Trial \u2014 Pro $49/mo'}
+          </button>
+          <button
+            onClick={() => handleClick('business')}
+            disabled={loading !== null}
+            className="px-5 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-lg transition text-sm disabled:opacity-50"
+          >
+            {loading === 'business' ? 'Redirecting...' : 'Business $199/mo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppDetailContent({ params }: { params: Promise<{ appId: string }> }) {
   const [appId, setAppId] = useState<string | null>(null);
   const { data: session, status } = useSession();
@@ -353,9 +403,10 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   const [modalResult, setModalResult] = useState<MonitoringResult | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Keyword | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
-  const [subscribeReason, setSubscribeReason] = useState('');
-  const { subscription } = useSubscription();
+  const { subscription, loading: subLoading } = useSubscription();
+
+  const isSubscribed = !subLoading && subscription?.plan !== 'free' &&
+    (subscription?.status === 'active' || subscription?.status === 'trialing');
 
   // Extract appId from params promise
   useEffect(() => {
@@ -409,11 +460,6 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.code === 'LIMIT_EXCEEDED') {
-          setSubscribeReason(data.error);
-          setShowSubscribeModal(true);
-          return;
-        }
         throw new Error(data.error);
       }
       setKeywords([...keywords, data]);
@@ -442,6 +488,22 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
     }
   }
 
+  async function handleSubscribe(plan: 'pro' | 'business') {
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+    }
+  }
+
   async function runMonitoring() {
     if (!appId) return;
     setMonitoring(true);
@@ -449,14 +511,6 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
       const res = await fetch(`/api/apps/${appId}/run-monitoring`, {
         method: 'POST',
       });
-      if (!res.ok) {
-        const data = await res.json();
-        if (data.code === 'SUBSCRIPTION_INACTIVE') {
-          setSubscribeReason(data.error);
-          setShowSubscribeModal(true);
-          return;
-        }
-      }
       if (res.ok) {
         await new Promise((r) => setTimeout(r, 2000));
         await fetchAppData();
@@ -526,24 +580,44 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
               <h1 className="text-3xl font-bold text-white">{app.name}</h1>
               <p className="text-white/45 text-sm mt-1">AI search visibility monitoring</p>
             </div>
-            <button
-              onClick={runMonitoring}
-              disabled={monitoring || keywords.length === 0}
-              className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-            >
-              {monitoring ? (
-                <span className="flex items-center gap-2">
-                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" />
-                  </svg>
-                  Running...
-                </span>
-              ) : (
-                'Run Monitoring'
-              )}
-            </button>
+            {isSubscribed ? (
+              <button
+                onClick={runMonitoring}
+                disabled={monitoring || keywords.length === 0}
+                className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+              >
+                {monitoring ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" />
+                    </svg>
+                    Running...
+                  </span>
+                ) : (
+                  'Run Monitoring'
+                )}
+              </button>
+            ) : (
+              <button
+                disabled
+                className="px-5 py-2 bg-zinc-700 text-white/40 font-semibold rounded-lg text-sm cursor-not-allowed flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Subscribe to Monitor
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Paywall Banner — shown when not subscribed */}
+        {!subLoading && !isSubscribed && (
+          <PaywallBanner
+            hasUsedTrial={subscription?.hasUsedTrial ?? false}
+            onSubscribe={handleSubscribe}
+          />
+        )}
 
         {/* Stats bar */}
         {totalResults > 0 && (
@@ -661,7 +735,14 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
         <div>
           <h2 className="text-base font-semibold text-white/80 mb-4">Monitoring Results</h2>
 
-          {resultsByKeyword.length === 0 ? (
+          {!isSubscribed && resultsByKeyword.length === 0 ? (
+            <div className="text-center py-16 text-white/35 border border-zinc-800 rounded-xl bg-zinc-900/30">
+              <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <p className="text-sm">Subscribe to unlock monitoring results</p>
+            </div>
+          ) : resultsByKeyword.length === 0 ? (
             <div className="text-center py-16 text-white/35">
               <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -717,14 +798,6 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
         onConfirm={confirmDeleteKeyword}
         onCancel={() => setDeleteTarget(null)}
         loading={deleting}
-      />
-
-      {/* Subscribe Modal */}
-      <SubscribeModal
-        open={showSubscribeModal}
-        onClose={() => setShowSubscribeModal(false)}
-        reason={subscribeReason}
-        hasUsedTrial={subscription?.hasUsedTrial ?? false}
       />
 
       {/* Full Response Modal */}

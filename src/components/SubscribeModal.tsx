@@ -40,11 +40,13 @@ const plans = [
 
 export default function SubscribeModal({ open, onClose, reason, hasUsedTrial }: SubscribeModalProps) {
   const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   if (!open) return null
 
   async function handleSubscribe(plan: 'pro' | 'business') {
     setLoading(plan)
+    setError(null)
     try {
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
@@ -52,11 +54,20 @@ export default function SubscribeModal({ open, onClose, reason, hasUsedTrial }: 
         body: JSON.stringify({ plan }),
       })
       const data = await res.json()
-      if (data.url) {
-        window.location.href = data.url
+      if (!res.ok) {
+        setError(data.error || 'Failed to create checkout session. Please try again.')
+        setLoading(null)
+        return
       }
+      if (!data.url) {
+        setError('No checkout URL returned. Please try again.')
+        setLoading(null)
+        return
+      }
+      window.location.href = data.url
     } catch (err) {
       console.error('Checkout error:', err)
+      setError('Network error. Please check your connection and try again.')
       setLoading(null)
     }
   }
@@ -90,6 +101,13 @@ export default function SubscribeModal({ open, onClose, reason, hasUsedTrial }: 
             </span>
           )}
         </div>
+
+        {/* Error message */}
+        {error && (
+          <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+            {error}
+          </div>
+        )}
 
         {/* Plan cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
