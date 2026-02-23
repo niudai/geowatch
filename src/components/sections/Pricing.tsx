@@ -1,55 +1,56 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check, Lock, Sparkles } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
+import Link from "next/link";
 
 const plans = [
   {
-    name: "Starter",
-    tagline: "For solo marketers",
-    price: "Coming Soon",
+    name: "Free",
+    tagline: "Get started",
+    price: "$0",
+    period: "",
     features: [
-      "1 brand tracked",
-      "3 AI platforms",
-      "100 prompts / month",
-      "Weekly reports",
-      "Email support",
+      "1 app tracked",
+      "3 keywords per app",
+      "Google AI + ChatGPT",
+      "Manual monitoring",
     ],
-    cta: "Join Waitlist",
+    cta: "Get Started",
     featured: false,
   },
   {
-    name: "Growth",
-    tagline: "For growing teams",
-    price: "Coming Soon",
+    name: "Pro",
+    tagline: "For solo marketers",
+    price: "$49",
+    period: "/mo",
     badge: "Most Popular",
     features: [
-      "3 brands tracked",
-      "All AI platforms",
-      "500 prompts / month",
-      "Daily monitoring",
-      "Competitor tracking",
-      "AI Action Center",
-      "Priority support",
+      "Up to 3 apps",
+      "10 keywords per app",
+      "Daily AI monitoring",
+      "Google AI + ChatGPT",
+      "Email reports",
+      "3-day free trial",
     ],
-    cta: "Join Waitlist",
+    cta: "Start Free Trial",
     featured: true,
   },
   {
-    name: "Enterprise",
-    tagline: "For agencies & large brands",
-    price: "Custom",
+    name: "Business",
+    tagline: "For growing teams",
+    price: "$199",
+    period: "/mo",
     features: [
-      "Unlimited brands",
-      "Custom AI platforms",
-      "Unlimited prompts",
+      "Up to 10 apps",
+      "10 keywords per app",
       "Real-time monitoring",
-      "Dedicated strategist",
+      "All AI platforms",
+      "Priority support",
       "API access",
-      "SSO + SOC2",
-      "SLA guarantee",
+      "3-day free trial",
     ],
-    cta: "Talk to Sales",
+    cta: "Start Free Trial",
     featured: false,
   },
 ];
@@ -63,14 +64,6 @@ export default function Pricing() {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-medium mb-5"
-          >
-            <Lock className="w-3 h-3" aria-hidden="true" /> Private beta pricing
-          </motion.div>
           <motion.h2
             id="pricing-heading"
             initial={{ opacity: 0, y: 20 }}
@@ -89,8 +82,8 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="max-w-lg mx-auto text-white/65 text-lg leading-relaxed"
           >
-            We&apos;re in private beta. Join the waitlist to lock in early-bird
-            pricing — up to 40% off at launch.
+            Start free. Upgrade when you need more apps and keywords.
+            All paid plans include a 3-day free trial.
           </motion.p>
         </div>
 
@@ -120,8 +113,9 @@ export default function Pricing() {
               <div className="mb-6">
                 <div className="text-sm font-medium text-white/55 mb-1">{plan.tagline}</div>
                 <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
-                <div className={`text-sm font-medium ${plan.featured ? "text-cyan-400" : "text-white/45"}`}>
-                  {plan.price}
+                <div className={`${plan.featured ? "text-cyan-400" : "text-white/80"}`}>
+                  <span className="text-4xl font-bold">{plan.price}</span>
+                  {plan.period && <span className="text-sm text-white/45">{plan.period}</span>}
                 </div>
               </div>
 
@@ -134,8 +128,8 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              <a
-                href="#waitlist"
+              <Link
+                href="/dashboard"
                 className={`block w-full text-center py-3 rounded-full text-sm font-semibold transition-all duration-200 ${
                   plan.featured
                     ? "bg-gradient-to-r from-cyan-500 to-amber-500 text-white hover:opacity-90 shadow-lg shadow-cyan-500/30"
@@ -144,7 +138,7 @@ export default function Pricing() {
                 aria-label={`${plan.cta} for ${plan.name} plan`}
               >
                 {plan.cta}
-              </a>
+              </Link>
             </motion.div>
           ))}
         </div>
@@ -155,7 +149,7 @@ export default function Pricing() {
           viewport={{ once: true }}
           className="text-center text-xs text-white/40 mt-8"
         >
-          Beta users get early-bird pricing locked in for life · No credit card during beta
+          All paid plans include a 3-day free trial · Cancel anytime
         </motion.p>
       </div>
     </section>

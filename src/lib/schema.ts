@@ -21,6 +21,8 @@ export const users = pgTable('user', {
   email: text('email').unique(),
   emailVerified: timestamp('emailVerified', { mode: 'date' }),
   image: text('image'),
+  stripeCustomerId: text('stripeCustomerId').unique(),
+  hasUsedTrial: boolean('hasUsedTrial').notNull().default(false),
 })
 
 export const accounts = pgTable(
@@ -87,6 +89,8 @@ export const apps = pgTable('app', {
   slug: varchar('slug', { length: 255 }).notNull(),
   description: text('description'),
   logoUrl: text('logoUrl'),
+  domain: varchar('domain', { length: 500 }),
+  productProfile: json('productProfile'),
   status: varchar('status', { length: 50 }).notNull().default('active'), // active | paused | archived
   createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
@@ -144,5 +148,25 @@ export const monitoringTasks = pgTable('monitoring_task', {
   nextRunAt: timestamp('nextRunAt', { mode: 'date' }),
   errorMessage: text('errorMessage'),
   createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+})
+
+// ── Subscription Tables ──────────────────────────────────────────────────────
+
+export const subscriptions = pgTable('subscription', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text('userId')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  stripeSubscriptionId: text('stripeSubscriptionId').notNull().unique(),
+  stripePriceId: text('stripePriceId').notNull(),
+  plan: varchar('plan', { length: 50 }).notNull(), // 'pro' | 'business'
+  status: varchar('status', { length: 50 }).notNull(), // 'active' | 'trialing' | 'past_due' | 'canceled'
+  currentPeriodStart: timestamp('currentPeriodStart', { mode: 'date' }),
+  currentPeriodEnd: timestamp('currentPeriodEnd', { mode: 'date' }),
+  cancelAtPeriodEnd: boolean('cancelAtPeriodEnd').notNull().default(false),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
 })
 

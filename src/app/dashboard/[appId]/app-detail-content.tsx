@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Modal from '@/components/Modal';
+import SubscribeModal from '@/components/SubscribeModal';
+import { useSubscription } from '@/hooks/useSubscription';
 
 interface App {
   id: string;
@@ -22,6 +25,17 @@ interface Keyword {
   createdAt: string;
 }
 
+interface LinkItem {
+  text: string;
+  url: string;
+  domain?: string;
+}
+
+interface CitationItem {
+  text: string;
+  urls: string[];
+}
+
 interface MonitoringResult {
   id: string;
   appId: string;
@@ -32,7 +46,298 @@ interface MonitoringResult {
   mentionedInResponse: boolean;
   sentiment: string;
   mentionText: string | null;
+  citations: string | CitationItem[] | null;
+  links: string | LinkItem[] | null;
   createdAt: string;
+}
+
+// Parse JSON field that may be a string or already parsed
+function parseJsonField<T>(field: string | T[] | null | undefined): T[] {
+  if (!field) return [];
+  if (Array.isArray(field)) return field;
+  try {
+    const parsed = JSON.parse(field);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// Highlight brand name in AI response text
+function HighlightedResponse({ text, brandName }: { text: string; brandName: string }) {
+  if (!text || !brandName) return <span>{text}</span>;
+
+  const lowerText = text.toLowerCase();
+  const lowerBrand = brandName.toLowerCase();
+  const parts: { text: string; highlight: boolean }[] = [];
+  let lastIndex = 0;
+
+  let searchFrom = 0;
+  while (searchFrom < lowerText.length) {
+    const idx = lowerText.indexOf(lowerBrand, searchFrom);
+    if (idx === -1) break;
+    if (idx > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, idx), highlight: false });
+    }
+    parts.push({ text: text.slice(idx, idx + brandName.length), highlight: true });
+    lastIndex = idx + brandName.length;
+    searchFrom = lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), highlight: false });
+  }
+
+  if (parts.length === 0) return <span>{text}</span>;
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.highlight ? (
+          <mark key={i} className="bg-cyan-500/20 text-cyan-300 px-0.5 rounded">
+            {part.text}
+          </mark>
+        ) : (
+          <span key={i}>{part.text}</span>
+        )
+      )}
+    </>
+  );
+}
+
+// Collapsible citations list
+function CitationsList({ links, citations }: { links: LinkItem[]; citations: CitationItem[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Merge links from both sources
+  const allLinks = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: LinkItem[] = [];
+
+    for (const link of links) {
+      if (link.url && !seen.has(link.url)) {
+        seen.add(link.url);
+        merged.push(link);
+      }
+    }
+
+    for (const cit of citations) {
+      for (const url of cit.urls || []) {
+        if (!seen.has(url)) {
+          seen.add(url);
+          try {
+            const domain = new URL(url).hostname;
+            merged.push({ text: cit.text || domain, url, domain });
+          } catch {}
+        }
+      }
+    }
+
+    return merged;
+  }, [links, citations]);
+
+  if (allLinks.length === 0) {
+    return <p className="text-xs text-white/40 mt-3">No cited sources</p>;
+  }
+
+  const visibleLinks = expanded ? allLinks : allLinks.slice(0, 3);
+
+  return (
+    <div className="mt-3 border-t border-zinc-700/40 pt-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="text-xs font-medium text-white/50 hover:text-white/70 transition flex items-center gap-1.5 mb-2"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        Cited Sources ({allLinks.length})
+      </button>
+
+      <div className="space-y-1.5">
+        {visibleLinks.map((link, i) => {
+          let domain = link.domain || '';
+          if (!domain) {
+            try { domain = new URL(link.url).hostname; } catch {}
+          }
+          return (
+            <a
+              key={i}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-xs text-white/60 hover:text-white/80 transition group"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+                alt=""
+                width={14}
+                height={14}
+                className="rounded-sm opacity-60 group-hover:opacity-100"
+              />
+              <span className="text-white/50 shrink-0">{domain}</span>
+              <span className="truncate">{link.text || link.url}</span>
+              <svg className="w-3 h-3 opacity-0 group-hover:opacity-60 shrink-0 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          );
+        })}
+      </div>
+
+      {!expanded && allLinks.length > 3 && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="text-xs text-cyan-400/70 hover:text-cyan-400 mt-1.5 transition"
+        >
+          +{allLinks.length - 3} more
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Confirm delete modal
+function ConfirmDeleteModal({
+  open,
+  keyword,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  open: boolean;
+  keyword: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onCancel}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-zinc-900 border border-zinc-700/60 rounded-xl max-w-md w-full mx-4 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Warning icon */}
+        <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+          <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+        </div>
+
+        <h3 className="text-lg font-semibold text-white text-center mb-2">Delete Keyword</h3>
+        <p className="text-sm text-white/55 text-center mb-2">
+          Are you sure you want to delete this keyword?
+        </p>
+        <p className="text-sm text-white/80 text-center bg-zinc-800 border border-zinc-700/40 rounded-lg px-3 py-2 mb-4 break-words">
+          &ldquo;{keyword}&rdquo;
+        </p>
+        <p className="text-xs text-red-400/70 text-center mb-6">
+          All monitoring results for this keyword will also be deleted. This cannot be undone.
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700/60 text-white/70 hover:text-white hover:bg-zinc-700 transition text-sm font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25 hover:text-red-300 transition text-sm font-medium disabled:opacity-50"
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Source result card
+function SourceCard({
+  result,
+  brandName,
+  onViewFull,
+}: {
+  result: MonitoringResult;
+  brandName: string;
+  onViewFull: (result: MonitoringResult) => void;
+}) {
+  const isGoogle = result.source === 'google_ai_mode';
+  const links = parseJsonField<LinkItem>(result.links);
+  const citations = parseJsonField<CitationItem>(result.citations);
+  const responsePreview = result.aiResponse?.substring(0, 600) || '';
+  const isTruncated = result.aiResponse?.length > 600;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-700/60 rounded-lg overflow-hidden">
+      {/* Card header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700/40">
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-xs font-medium px-2 py-0.5 rounded ${
+              isGoogle
+                ? 'bg-blue-500/15 text-blue-400'
+                : 'bg-purple-500/15 text-purple-400'
+            }`}
+          >
+            {isGoogle ? 'Google AI Mode' : 'ChatGPT'}
+          </span>
+          <span className="text-xs text-white/40">
+            {new Date(result.createdAt).toLocaleString()}
+          </span>
+        </div>
+        <span
+          className={`text-xs font-semibold px-2.5 py-0.5 rounded ${
+            result.mentionedInResponse
+              ? 'bg-emerald-500/15 text-emerald-400'
+              : 'bg-red-500/15 text-red-400'
+          }`}
+        >
+          {result.mentionedInResponse ? '\u2713 Mentioned' : '\u2717 Not Mentioned'}
+        </span>
+      </div>
+
+      {/* AI Response */}
+      <div className="px-4 py-3">
+        <div className="text-sm text-white/65 leading-relaxed max-h-40 overflow-y-auto">
+          <HighlightedResponse text={responsePreview} brandName={brandName} />
+          {isTruncated && (
+            <button
+              onClick={() => onViewFull(result)}
+              className="text-cyan-400/70 hover:text-cyan-400 transition ml-1"
+            >
+              ... Click to view full response
+            </button>
+          )}
+        </div>
+
+        {/* Citations */}
+        <CitationsList links={links} citations={citations} />
+      </div>
+    </div>
+  );
 }
 
 export default function AppDetailContent({ params }: { params: Promise<{ appId: string }> }) {
@@ -45,6 +350,12 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   const [loading, setLoading] = useState(true);
   const [newKeyword, setNewKeyword] = useState('');
   const [monitoring, setMonitoring] = useState(false);
+  const [modalResult, setModalResult] = useState<MonitoringResult | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Keyword | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [subscribeReason, setSubscribeReason] = useState('');
+  const { subscription } = useSubscription();
 
   // Extract appId from params promise
   useEffect(() => {
@@ -66,18 +377,15 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   async function fetchAppData() {
     if (!appId) return;
     try {
-      // Fetch app details
       const appRes = await fetch(`/api/apps`);
       const allApps = await appRes.json();
       const currentApp = allApps.find((a: App) => a.id === appId);
       setApp(currentApp || null);
 
-      // Fetch keywords
       const keywordsRes = await fetch(`/api/apps/${appId}/keywords`);
       const keywordsData = await keywordsRes.json();
       setKeywords(keywordsData);
 
-      // Fetch recent monitoring results
       const resultsRes = await fetch(`/api/apps/${appId}/results`);
       if (resultsRes.ok) {
         const resultsData = await resultsRes.json();
@@ -93,19 +401,44 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
 
   async function addKeyword() {
     if (!newKeyword.trim() || !appId) return;
-
     try {
       const res = await fetch(`/api/apps/${appId}/keywords`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword: newKeyword }),
       });
-
-      const newKw = await res.json();
-      setKeywords([...keywords, newKw]);
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.code === 'LIMIT_EXCEEDED') {
+          setSubscribeReason(data.error);
+          setShowSubscribeModal(true);
+          return;
+        }
+        throw new Error(data.error);
+      }
+      setKeywords([...keywords, data]);
       setNewKeyword('');
     } catch (error) {
       console.error('Failed to add keyword:', error);
+    }
+  }
+
+  async function confirmDeleteKeyword() {
+    if (!appId || !deleteTarget) return;
+    setDeleting(true);
+    try {
+      await fetch(`/api/apps/${appId}/keywords`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywordId: deleteTarget.id }),
+      });
+      setKeywords(keywords.filter((kw) => kw.id !== deleteTarget.id));
+      setResults(results.filter((r) => r.keywordId !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error('Failed to delete keyword:', error);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -116,10 +449,16 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
       const res = await fetch(`/api/apps/${appId}/run-monitoring`, {
         method: 'POST',
       });
-
+      if (!res.ok) {
+        const data = await res.json();
+        if (data.code === 'SUBSCRIPTION_INACTIVE') {
+          setSubscribeReason(data.error);
+          setShowSubscribeModal(true);
+          return;
+        }
+      }
       if (res.ok) {
-        // Refetch results after monitoring completes
-        await new Promise((r) => setTimeout(r, 2000)); // Wait a bit for results to be saved
+        await new Promise((r) => setTimeout(r, 2000));
         await fetchAppData();
       }
     } catch (error) {
@@ -129,16 +468,38 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
     }
   }
 
+  // Group results by keyword
+  const resultsByKeyword = useMemo(() => {
+    const groups: Record<string, { keyword: Keyword; results: MonitoringResult[] }> = {};
+    for (const kw of keywords) {
+      groups[kw.id] = { keyword: kw, results: [] };
+    }
+    for (const result of results) {
+      if (groups[result.keywordId]) {
+        groups[result.keywordId].results.push(result);
+      }
+    }
+    return Object.values(groups).filter((g) => g.results.length > 0);
+  }, [keywords, results]);
+
+  // Summary stats
+  const totalMentions = results.filter((r) => r.mentionedInResponse).length;
+  const totalResults = results.length;
+
   if (status === 'loading' || loading || !appId) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#050508] text-white/60">
+        Loading...
+      </div>
+    );
   }
 
   if (!app) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-[#050508]">
         <div className="text-center">
-          <p className="text-xl text-gray-400 mb-4">App not found</p>
-          <Link href="/dashboard" className="text-cyan-500 hover:text-cyan-400">
+          <p className="text-xl text-white/45 mb-4">App not found</p>
+          <Link href="/dashboard" className="text-cyan-400 hover:text-cyan-300 transition">
             Back to Dashboard
           </Link>
         </div>
@@ -147,129 +508,332 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-[#050508] text-white">
+      <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Link href="/dashboard" className="text-cyan-500 hover:text-cyan-400 text-sm mb-4 inline-block">
-            ← Back to Dashboard
-          </Link>
-          <h1 className="text-4xl font-bold mb-2">{app.name}</h1>
-          <p className="text-gray-400">Monitor your brand in AI search results</p>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-4 mb-8">
-          <button
-            onClick={runMonitoring}
-            disabled={monitoring || keywords.length === 0}
-            className="px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded font-semibold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          <Link
+            href="/dashboard"
+            className="text-white/40 hover:text-white/60 text-sm mb-4 inline-flex items-center gap-1 transition"
           >
-            {monitoring ? 'Monitoring...' : 'Run Monitoring'}
-          </button>
-        </div>
-
-        {/* Keywords Section */}
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4">Keywords</h2>
-          <div className="flex gap-3 mb-6">
-            <input
-              type="text"
-              placeholder="Add a keyword (e.g., GeoWatch, AI SEO)"
-              value={newKeyword}
-              onChange={(e) => setNewKeyword(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && addKeyword()}
-              className="flex-1 px-4 py-2 rounded bg-slate-700 border border-slate-600 text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
-            />
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            Dashboard
+          </Link>
+          <div className="flex items-center justify-between mt-2">
+            <div>
+              <h1 className="text-3xl font-bold text-white">{app.name}</h1>
+              <p className="text-white/45 text-sm mt-1">AI search visibility monitoring</p>
+            </div>
             <button
-              onClick={addKeyword}
-              className="px-6 py-2 bg-slate-700 rounded hover:bg-slate-600 transition font-semibold"
+              onClick={runMonitoring}
+              disabled={monitoring || keywords.length === 0}
+              className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
             >
-              Add
+              {monitoring ? (
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" />
+                  </svg>
+                  Running...
+                </span>
+              ) : (
+                'Run Monitoring'
+              )}
             </button>
           </div>
+        </div>
 
+        {/* Stats bar */}
+        {totalResults > 0 && (
+          <div className="flex gap-4 mb-8">
+            <div className="bg-zinc-900 border border-zinc-700/60 rounded-lg px-5 py-3 flex-1">
+              <p className="text-xs text-white/40 uppercase tracking-wider">Keywords</p>
+              <p className="text-2xl font-bold text-white mt-0.5">{keywords.length}</p>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-700/60 rounded-lg px-5 py-3 flex-1">
+              <p className="text-xs text-white/40 uppercase tracking-wider">Mentions</p>
+              <p className="text-2xl font-bold text-emerald-400 mt-0.5">
+                {totalMentions}
+                <span className="text-sm font-normal text-white/35 ml-1">/ {totalResults}</span>
+              </p>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-700/60 rounded-lg px-5 py-3 flex-1">
+              <p className="text-xs text-white/40 uppercase tracking-wider">Mention Rate</p>
+              <p className="text-2xl font-bold text-white mt-0.5">
+                {totalResults > 0 ? Math.round((totalMentions / totalResults) * 100) : 0}%
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Keywords Section */}
+        <div className="bg-zinc-900 border border-zinc-700/60 rounded-lg overflow-hidden mb-8">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-700/40">
+            <h2 className="text-base font-semibold text-white/80">Tracked Keywords</h2>
+            <span className="text-xs text-white/35">{keywords.length} keyword{keywords.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Add keyword input */}
+          <div className="px-5 py-3 border-b border-zinc-700/30 bg-zinc-900/50">
+            <div className="flex gap-3">
+              <input
+                type="text"
+                placeholder='Add keyword, e.g. "best database GUI tool for PostgreSQL"'
+                value={newKeyword}
+                onChange={(e) => setNewKeyword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addKeyword()}
+                className="flex-1 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-white text-sm placeholder-white/25 focus:outline-none focus:border-cyan-500/60 transition"
+              />
+              <button
+                onClick={addKeyword}
+                disabled={!newKeyword.trim()}
+                className="px-5 py-2 bg-cyan-500/15 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/25 transition text-sm font-medium text-cyan-400 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+              >
+                + Add
+              </button>
+            </div>
+          </div>
+
+          {/* Keyword list */}
           {keywords.length === 0 ? (
-            <p className="text-gray-400 py-4">No keywords yet. Add one to get started!</p>
+            <div className="px-5 py-10 text-center">
+              <svg className="w-10 h-10 mx-auto mb-3 text-white/15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <p className="text-white/35 text-sm">No keywords yet. Add one to start monitoring.</p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {keywords.map((kw) => (
-                <div
-                  key={kw.id}
-                  className="bg-slate-700 rounded p-4 flex justify-between items-center"
-                >
-                  <div>
-                    <p className="font-semibold">{kw.keyword}</p>
-                    <p className="text-xs text-gray-400">
-                      Last checked:{' '}
-                      {kw.lastCheckedAt ? new Date(kw.lastCheckedAt).toLocaleString() : 'Never'}
-                    </p>
+            <div className="divide-y divide-zinc-800/80">
+              {keywords.map((kw, i) => {
+                const kwResults = results.filter((r) => r.keywordId === kw.id);
+                const mentions = kwResults.filter((r) => r.mentionedInResponse).length;
+                return (
+                  <div
+                    key={kw.id}
+                    className="flex items-center gap-4 px-5 py-3 hover:bg-zinc-800/40 transition group"
+                  >
+                    {/* Index */}
+                    <span className="text-xs text-white/20 w-5 text-right shrink-0 tabular-nums">{i + 1}</span>
+
+                    {/* Keyword text */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white/75 truncate">{kw.keyword}</p>
+                    </div>
+
+                    {/* Mention stats (if has results) */}
+                    {kwResults.length > 0 && (
+                      <span className={`text-xs px-2 py-0.5 rounded shrink-0 ${
+                        mentions > 0
+                          ? 'bg-emerald-500/10 text-emerald-400/80'
+                          : 'bg-zinc-800 text-white/30'
+                      }`}>
+                        {mentions}/{kwResults.length} mentioned
+                      </span>
+                    )}
+
+                    {/* Last checked */}
+                    {kw.lastCheckedAt && (
+                      <span className="text-[11px] text-white/25 shrink-0 hidden sm:block">
+                        {new Date(kw.lastCheckedAt).toLocaleDateString()}
+                      </span>
+                    )}
+
+                    {/* Delete button — always visible */}
+                    <button
+                      onClick={() => setDeleteTarget(kw)}
+                      className="p-1.5 rounded-md text-white/20 hover:text-red-400 hover:bg-red-500/10 transition shrink-0"
+                      aria-label={`Delete keyword: ${kw.keyword}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
-                  <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-1 rounded">
-                    {kw.status}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Results Section */}
+        {/* Results grouped by keyword */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Recent Results</h2>
-          {results.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p>No monitoring results yet. Run monitoring to get started!</p>
+          <h2 className="text-base font-semibold text-white/80 mb-4">Monitoring Results</h2>
+
+          {resultsByKeyword.length === 0 ? (
+            <div className="text-center py-16 text-white/35">
+              <svg className="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <p className="text-sm">No results yet. Run monitoring to check your brand visibility.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {results.map((result) => (
-                <div
-                  key={result.id}
-                  className="bg-slate-800 border border-slate-700 rounded-lg p-6"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold mb-1">
-                        {result.source === 'google_ai_mode' ? '🔍 Google AI Mode' : '💬 ChatGPT'}
-                      </h3>
-                      <p className="text-sm text-gray-400">Query: {result.queryText}</p>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`px-3 py-1 rounded text-sm font-semibold ${
-                          result.mentionedInResponse
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-red-500/20 text-red-400'
-                        }`}
-                      >
-                        {result.mentionedInResponse ? '✓ Mentioned' : '✗ Not Mentioned'}
+            <div className="space-y-6">
+              {resultsByKeyword.map(({ keyword: kw, results: kwResults }) => (
+                <div key={kw.id} className="border border-zinc-800 rounded-xl overflow-hidden">
+                  {/* Keyword header */}
+                  <div className="bg-zinc-900/50 px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/70 font-medium text-sm">{kw.keyword}</span>
+                      <span className="text-[10px] text-white/30 bg-zinc-800 px-1.5 py-0.5 rounded">
+                        {kwResults.length} source{kwResults.length !== 1 ? 's' : ''}
                       </span>
-                      <p className="text-xs text-gray-400 mt-2">
-                        {new Date(result.createdAt).toLocaleString()}
-                      </p>
                     </div>
-                  </div>
-
-                  <div className="bg-slate-700/50 rounded p-3 mb-4 max-h-48 overflow-y-auto">
-                    <p className="text-sm text-gray-300">{result.aiResponse.substring(0, 500)}</p>
-                    {result.aiResponse.length > 500 && (
-                      <p className="text-xs text-gray-500 mt-2">... (truncated)</p>
+                    {kw.lastCheckedAt && (
+                      <span className="text-[10px] text-white/30">
+                        Checked {new Date(kw.lastCheckedAt).toLocaleString()}
+                      </span>
                     )}
                   </div>
 
-                  {result.mentionedInResponse && result.mentionText && (
-                    <div className="bg-cyan-500/10 border border-cyan-500/30 rounded p-3">
-                      <p className="text-xs text-cyan-400 font-semibold mb-1">Mention Context:</p>
-                      <p className="text-sm text-cyan-50">{result.mentionText}</p>
-                    </div>
-                  )}
+                  {/* Source cards */}
+                  <div className="p-4 space-y-3 bg-[#0a0a0f]">
+                    {/* Show Google AI Mode first, then ChatGPT */}
+                    {['google_ai_mode', 'chatgpt'].map((source) => {
+                      const result = kwResults.find((r) => r.source === source);
+                      if (!result) return null;
+                      return (
+                        <SourceCard
+                          key={result.id}
+                          result={result}
+                          brandName={app.name}
+                          onViewFull={setModalResult}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        open={!!deleteTarget}
+        keyword={deleteTarget?.keyword || ''}
+        onConfirm={confirmDeleteKeyword}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
+
+      {/* Subscribe Modal */}
+      <SubscribeModal
+        open={showSubscribeModal}
+        onClose={() => setShowSubscribeModal(false)}
+        reason={subscribeReason}
+        hasUsedTrial={subscription?.hasUsedTrial ?? false}
+      />
+
+      {/* Full Response Modal */}
+      <Modal
+        open={!!modalResult}
+        onClose={() => setModalResult(null)}
+        wide
+        title={
+          modalResult
+            ? `${modalResult.source === 'google_ai_mode' ? 'Google AI Mode' : 'ChatGPT'} — ${modalResult.queryText}`
+            : undefined
+        }
+      >
+        {modalResult && (() => {
+          const links = parseJsonField<LinkItem>(modalResult.links);
+          const citations = parseJsonField<CitationItem>(modalResult.citations);
+          const allLinks: LinkItem[] = [];
+          const seen = new Set<string>();
+          for (const link of links) {
+            if (link.url && !seen.has(link.url)) {
+              seen.add(link.url);
+              allLinks.push(link);
+            }
+          }
+          for (const cit of citations) {
+            for (const url of cit.urls || []) {
+              if (!seen.has(url)) {
+                seen.add(url);
+                try {
+                  const domain = new URL(url).hostname;
+                  allLinks.push({ text: cit.text || domain, url, domain });
+                } catch {}
+              }
+            }
+          }
+
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* Left: AI Response */}
+              <div className="lg:col-span-3">
+                {/* Mention badge */}
+                <div className="mb-4">
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-1 rounded ${
+                      modalResult.mentionedInResponse
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : 'bg-red-500/15 text-red-400'
+                    }`}
+                  >
+                    {modalResult.mentionedInResponse ? '\u2713 Mentioned' : '\u2717 Not Mentioned'}
+                  </span>
+                  <span className="text-xs text-white/40 ml-3">
+                    {new Date(modalResult.createdAt).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Full AI Response */}
+                <div className="text-sm text-white/70 leading-relaxed whitespace-pre-wrap">
+                  <HighlightedResponse text={modalResult.aiResponse} brandName={app.name} />
+                </div>
+              </div>
+
+              {/* Right: Cited Sources */}
+              <div className="lg:col-span-2 lg:border-l lg:border-zinc-700/40 lg:pl-6">
+                <h3 className="text-sm font-medium text-white/50 mb-3">
+                  Cited Sources ({allLinks.length})
+                </h3>
+                {allLinks.length === 0 ? (
+                  <p className="text-xs text-white/30">No cited sources</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {allLinks.map((link, i) => {
+                      let domain = (link as any).domain || '';
+                      if (!domain) {
+                        try { domain = new URL(link.url).hostname; } catch {}
+                      }
+                      return (
+                        <a
+                          key={i}
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start gap-2.5 p-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/30 hover:border-zinc-600/50 hover:bg-zinc-800 transition group"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+                            alt=""
+                            width={16}
+                            height={16}
+                            className="rounded-sm mt-0.5 shrink-0 opacity-70 group-hover:opacity-100"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-white/55 truncate">{domain}</p>
+                            <p className="text-xs text-white/40 truncate mt-0.5">{link.text || link.url}</p>
+                          </div>
+                          <svg className="w-3 h-3 text-white/20 group-hover:text-white/50 shrink-0 mt-0.5 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
     </div>
   );
 }

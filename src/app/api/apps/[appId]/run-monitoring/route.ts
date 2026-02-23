@@ -1,8 +1,10 @@
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { apps, keywords, monitoringResults, monitoringTasks } from '@/lib/schema';
-import { eq, and } from 'drizzle-orm';
-import { queryGoogleAIMode, queryChatGPT, generateQueries, detectMention } from '@/lib/monitoring';
+import { eq, and, count } from 'drizzle-orm';
+import { queryGoogleAIMode, queryChatGPT, detectMention } from '@/lib/monitoring';
+import { getUserSubscription, isActiveSubscription } from '@/lib/subscription';
+import { FREE_LIMITS } from '@/lib/plans';
 
 export async function POST(req: Request, { params }: { params: Promise<{ appId: string }> }) {
   const { appId } = await params;
@@ -15,63 +17,92 @@ export async function POST(req: Request, { params }: { params: Promise<{ appId: 
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  // Check subscription — paid users must have active subscription
+  const sub = await getUserSubscription(session.user.id);
+  if (sub?.plan && !isActiveSubscription(sub.status)) {
+    return Response.json(
+      { error: 'Your subscription is inactive. Please update your billing to continue monitoring.', code: 'SUBSCRIPTION_INACTIVE' },
+      { status: 403 }
+    );
+  }
+
   // Get all keywords
   const appKeywords = await db
     .select()
     .from(keywords)
     .where(and(eq(keywords.appId, appId), eq(keywords.status, 'active')));
 
+  const brandName = app[0].name; // Use app name as brand for mention detection
   const results = [];
 
   for (const kw of appKeywords) {
-    const queries = generateQueries(kw.keyword);
+    const query = kw.keyword;
 
-    for (const query of queries) {
-      try {
-        // Run Google AI Mode
-        const googleResult = await queryGoogleAIMode(query);
-        const { mentioned: gMentioned, text: gText } = detectMention(googleResult.response, kw.keyword);
+    // Google AI Mode
+    try {
+      const googleResult = await queryGoogleAIMode(query);
+      const { mentioned: gMentioned, text: gText } = detectMention(googleResult.response, brandName);
 
-        const [savedGoogleResult] = await db
-          .insert(monitoringResults)
-          .values({
-            appId,
-            keywordId: kw.id,
-            source: 'google_ai_mode',
-            queryText: query,
-            aiResponse: googleResult.response,
-            mentionedInResponse: gMentioned,
-            sentiment: 'neutral',
-            citations: googleResult.citations ? JSON.stringify(googleResult.citations) : null,
-            links: googleResult.links ? JSON.stringify(googleResult.links) : null,
-            mentionText: gText || undefined,
-          })
-          .returning();
+      // Delete old result for this keyword+source before inserting
+      await db.delete(monitoringResults).where(
+        and(
+          eq(monitoringResults.keywordId, kw.id),
+          eq(monitoringResults.source, 'google_ai_mode')
+        )
+      );
 
-        results.push(savedGoogleResult);
+      const [savedGoogleResult] = await db
+        .insert(monitoringResults)
+        .values({
+          appId,
+          keywordId: kw.id,
+          source: 'google_ai_mode',
+          queryText: query,
+          aiResponse: googleResult.response,
+          mentionedInResponse: gMentioned,
+          sentiment: 'neutral',
+          citations: googleResult.citations ? JSON.stringify(googleResult.citations) : null,
+          links: googleResult.links ? JSON.stringify(googleResult.links) : null,
+          mentionText: gText || undefined,
+        })
+        .returning();
 
-        // Run ChatGPT
-        const chatGPTResult = await queryChatGPT(query);
-        const { mentioned: cMentioned, text: cText } = detectMention(chatGPTResult.response, kw.keyword);
+      results.push(savedGoogleResult);
+    } catch (error) {
+      console.error(`[Monitoring] Google AI Mode error for "${query}":`, error);
+    }
 
-        const [savedChatResult] = await db
-          .insert(monitoringResults)
-          .values({
-            appId,
-            keywordId: kw.id,
-            source: 'chatgpt',
-            queryText: query,
-            aiResponse: chatGPTResult.response,
-            mentionedInResponse: cMentioned,
-            sentiment: 'neutral',
-            mentionText: cText || undefined,
-          })
-          .returning();
+    // ChatGPT
+    try {
+      const chatGPTResult = await queryChatGPT(query);
+      const { mentioned: cMentioned, text: cText } = detectMention(chatGPTResult.response, brandName);
 
-        results.push(savedChatResult);
-      } catch (error) {
-        console.error(`[Monitoring] Error for keyword "${kw.keyword}":`, error);
-      }
+      // Delete old result for this keyword+source before inserting
+      await db.delete(monitoringResults).where(
+        and(
+          eq(monitoringResults.keywordId, kw.id),
+          eq(monitoringResults.source, 'chatgpt')
+        )
+      );
+
+      const [savedChatResult] = await db
+        .insert(monitoringResults)
+        .values({
+          appId,
+          keywordId: kw.id,
+          source: 'chatgpt',
+          queryText: query,
+          aiResponse: chatGPTResult.response,
+          mentionedInResponse: cMentioned,
+          sentiment: 'neutral',
+          links: chatGPTResult.links ? JSON.stringify(chatGPTResult.links) : null,
+          mentionText: cText || undefined,
+        })
+        .returning();
+
+      results.push(savedChatResult);
+    } catch (error) {
+      console.error(`[Monitoring] ChatGPT error for "${query}":`, error);
     }
 
     // Update last checked time

@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import CreateAppWizard from '@/components/CreateAppWizard';
+import SubscribeModal from '@/components/SubscribeModal';
+import { useSubscription } from '@/hooks/useSubscription';
 
 interface App {
   id: string;
@@ -15,10 +18,14 @@ interface App {
 export default function DashboardContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newAppName, setNewAppName] = useState('');
-  const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [subscribeReason, setSubscribeReason] = useState('');
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+  const { subscription, loading: subLoading, refresh: refreshSubscription } = useSubscription();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -32,6 +39,17 @@ export default function DashboardContent() {
     }
   }, [status]);
 
+  // Handle checkout return
+  useEffect(() => {
+    if (searchParams.get('checkout') === 'success') {
+      setCheckoutSuccess(true);
+      refreshSubscription();
+      // Clean URL
+      window.history.replaceState({}, '', '/dashboard');
+      setTimeout(() => setCheckoutSuccess(false), 5000);
+    }
+  }, [searchParams, refreshSubscription]);
+
   async function fetchApps() {
     try {
       const res = await fetch('/api/apps');
@@ -44,90 +62,154 @@ export default function DashboardContent() {
     }
   }
 
-  async function createApp() {
-    if (!newAppName.trim()) return;
+  function handleCreateApp() {
+    setShowWizard(true);
+  }
 
+  function handleLimitExceeded(reason: string) {
+    setShowWizard(false);
+    setSubscribeReason(reason);
+    setShowSubscribeModal(true);
+  }
+
+  async function handleManageBilling() {
     try {
-      const res = await fetch('/api/apps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newAppName }),
-      });
-
-      const newApp = await res.json();
-      setApps([...apps, newApp]);
-      setNewAppName('');
-    } catch (error) {
-      console.error('Failed to create app:', error);
+      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Portal error:', err);
     }
   }
 
+  const planLabel = subscription?.plan === 'free' ? 'Free Tier' :
+    subscription?.plan === 'pro' ? 'Pro Plan' :
+    subscription?.plan === 'business' ? 'Business Plan' : '';
+
   if (status === 'loading' || loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#050508] text-white/60">
+        Loading...
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold mb-2">GeoWatch Dashboard</h1>
-          <p className="text-gray-400">Monitor your brand mentions in AI search results</p>
-        </div>
+    <div className="min-h-screen bg-[#050508] text-white">
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Checkout success banner */}
+        {checkoutSuccess && (
+          <div className="mb-6 px-4 py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-sm text-emerald-400 flex items-center gap-2">
+            <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Subscription activated! You can now create more apps and keywords.
+          </div>
+        )}
 
-        {/* Create App Section */}
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4">Create New App</h2>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="App name (e.g., My SaaS)"
-              value={newAppName}
-              onChange={(e) => setNewAppName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && createApp()}
-              className="flex-1 px-4 py-2 rounded bg-slate-700 border border-slate-600 text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
-            />
+        {/* Header */}
+        <div className="flex items-center justify-between mb-10">
+          <div>
+            <h1 className="text-3xl font-bold text-white">GeoWatch Dashboard</h1>
+            <p className="text-white/45 text-sm mt-1">Monitor your brand mentions in AI search results</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Subscription badge */}
+            {!subLoading && planLabel && (
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                subscription?.plan === 'free'
+                  ? 'bg-zinc-800 text-white/50 border border-zinc-700/60'
+                  : subscription?.status === 'trialing'
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+              }`}>
+                {subscription?.status === 'trialing' ? `${planLabel} (Trial)` : planLabel}
+              </span>
+            )}
+            {/* Manage billing button — only for paying users */}
+            {subscription?.plan && subscription.plan !== 'free' && (
+              <button
+                onClick={handleManageBilling}
+                className="px-3 py-1.5 text-xs text-white/50 hover:text-white/70 border border-zinc-700/60 rounded-lg transition"
+              >
+                Manage Billing
+              </button>
+            )}
             <button
-              onClick={createApp}
-              className="px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded font-semibold hover:opacity-90 transition"
+              onClick={handleCreateApp}
+              className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition text-sm"
             >
-              Create
+              + Create New App
             </button>
           </div>
         </div>
 
         {/* Apps List */}
-        <div>
-          <h2 className="text-2xl font-bold mb-4">Your Apps</h2>
-          {apps.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p>No apps yet. Create one to get started!</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {apps.map((app) => (
-                <div
-                  key={app.id}
-                  onClick={() => setSelectedApp(app.id)}
-                  className="bg-slate-800 border border-slate-700 rounded-lg p-6 cursor-pointer hover:border-cyan-500 transition"
-                >
-                  <h3 className="text-xl font-bold mb-2">{app.name}</h3>
-                  <p className="text-sm text-gray-400 mb-4">Status: {app.status}</p>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      router.push(`/dashboard/${app.id}`);
-                    }}
-                    className="w-full px-4 py-2 bg-slate-700 rounded hover:bg-slate-600 transition text-sm font-semibold"
-                  >
-                    Manage App
-                  </button>
+        {apps.length === 0 ? (
+          <div className="text-center py-20">
+            <svg className="w-16 h-16 mx-auto mb-4 text-white/15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <p className="text-white/40 mb-4">No apps yet. Create one to start monitoring.</p>
+            <button
+              onClick={handleCreateApp}
+              className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition text-sm"
+            >
+              Create Your First App
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {apps.map((app) => (
+              <div
+                key={app.id}
+                onClick={() => router.push(`/dashboard/${app.id}`)}
+                className="bg-zinc-900 border border-zinc-700/60 rounded-lg p-6 cursor-pointer hover:border-cyan-500/60 transition group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-white group-hover:text-cyan-400 transition">
+                    {app.name}
+                  </h3>
+                  <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${
+                    app.status === 'active'
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : 'bg-zinc-700 text-white/40'
+                  }`}>
+                    {app.status}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <p className="text-xs text-white/35">
+                  Created {new Date(app.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Create App Wizard */}
+      {showWizard && (
+        <CreateAppWizard
+          onComplete={(appId) => {
+            setShowWizard(false);
+            fetchApps();
+            refreshSubscription();
+            router.push(`/dashboard/${appId}`);
+          }}
+          onCancel={() => setShowWizard(false)}
+          onLimitExceeded={handleLimitExceeded}
+        />
+      )}
+
+      {/* Subscribe Modal */}
+      <SubscribeModal
+        open={showSubscribeModal}
+        onClose={() => setShowSubscribeModal(false)}
+        reason={subscribeReason}
+        hasUsedTrial={subscription?.hasUsedTrial ?? false}
+      />
     </div>
   );
 }
