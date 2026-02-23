@@ -340,14 +340,36 @@ function SourceCard({
 }
 
 // Paywall banner for non-subscribers
-function PaywallBanner({ hasUsedTrial, onSubscribe }: { hasUsedTrial: boolean; onSubscribe: (plan: 'pro' | 'business') => void }) {
+function PaywallBanner({ hasUsedTrial }: { hasUsedTrial: boolean }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleClick(plan: 'pro' | 'business') {
     setLoading(plan);
     setError(null);
-    onSubscribe(plan);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to create checkout session.');
+        setLoading(null);
+        return;
+      }
+      if (!data.url) {
+        setError('No checkout URL returned. Please try again.');
+        setLoading(null);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      console.error('Checkout error:', err);
+      setError('Network error. Please try again.');
+      setLoading(null);
+    }
   }
 
   return (
@@ -367,6 +389,9 @@ function PaywallBanner({ hasUsedTrial, onSubscribe }: { hasUsedTrial: boolean; o
             <span className="inline-block mt-1 px-2.5 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full text-[11px] font-medium text-emerald-400">
               3-day free trial included
             </span>
+          )}
+          {error && (
+            <p className="text-sm text-red-400 mt-2">{error}</p>
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -488,22 +513,6 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
     }
   }
 
-  async function handleSubscribe(plan: 'pro' | 'business') {
-    try {
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (err) {
-      console.error('Checkout error:', err);
-    }
-  }
-
   async function runMonitoring() {
     if (!appId) return;
     setMonitoring(true);
@@ -615,7 +624,6 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
         {!subLoading && !isSubscribed && (
           <PaywallBanner
             hasUsedTrial={subscription?.hasUsedTrial ?? false}
-            onSubscribe={handleSubscribe}
           />
         )}
 
