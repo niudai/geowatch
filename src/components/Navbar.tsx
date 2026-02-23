@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
 import BrandIcon from "./BrandIcon";
 
 const navLinks = [
@@ -12,8 +13,10 @@ const navLinks = [
 ];
 
 export default function Navbar() {
+  const { data: session, status } = useSession();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const isLoggedIn = status === "authenticated";
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -57,18 +60,37 @@ export default function Navbar() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
-            <a
-              href="/signin"
-              className="text-sm px-4 py-2 rounded-full bg-white/[0.07] border border-white/[0.12] text-white/75 hover:bg-white/[0.12] hover:text-white transition-all duration-200"
-            >
-              Sign in
-            </a>
-            <a
-              href="/dashboard"
-              className="text-sm px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium hover:opacity-90 transition-all duration-200 shadow-lg shadow-emerald-500/20"
-            >
-              Dashboard
-            </a>
+            {isLoggedIn ? (
+              <>
+                <button
+                  onClick={() => signOut()}
+                  className="text-sm px-4 py-2 rounded-full bg-white/[0.07] border border-white/[0.12] text-white/75 hover:bg-white/[0.12] hover:text-white transition-all duration-200"
+                >
+                  Sign out
+                </button>
+                <a
+                  href="/dashboard"
+                  className="text-sm px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium hover:opacity-90 transition-all duration-200 shadow-lg shadow-emerald-500/20"
+                >
+                  Dashboard
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/signin"
+                  className="text-sm px-4 py-2 rounded-full bg-white/[0.07] border border-white/[0.12] text-white/75 hover:bg-white/[0.12] hover:text-white transition-all duration-200"
+                >
+                  Sign in
+                </a>
+                <a
+                  href="/dashboard"
+                  className="text-sm px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium hover:opacity-90 transition-all duration-200 shadow-lg shadow-emerald-500/20"
+                >
+                  Dashboard
+                </a>
+              </>
+            )}
           </div>
 
           {/* Mobile menu toggle */}
@@ -104,20 +126,40 @@ export default function Navbar() {
                 </a>
               ))}
               <div className="pt-3 border-t border-white/[0.08] space-y-2 mt-2">
-                <a
-                  href="/signin"
-                  className="block text-center py-2.5 rounded-full bg-white/[0.07] border border-white/[0.12] text-white font-medium text-sm"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Sign in
-                </a>
-                <a
-                  href="/dashboard"
-                  className="block text-center py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium text-sm"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Dashboard
-                </a>
+                {isLoggedIn ? (
+                  <>
+                    <button
+                      onClick={() => { setMenuOpen(false); signOut(); }}
+                      className="block w-full text-center py-2.5 rounded-full bg-white/[0.07] border border-white/[0.12] text-white font-medium text-sm"
+                    >
+                      Sign out
+                    </button>
+                    <a
+                      href="/dashboard"
+                      className="block text-center py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium text-sm"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Dashboard
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <a
+                      href="/signin"
+                      className="block text-center py-2.5 rounded-full bg-white/[0.07] border border-white/[0.12] text-white font-medium text-sm"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Sign in
+                    </a>
+                    <a
+                      href="/dashboard"
+                      className="block text-center py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-medium text-sm"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Dashboard
+                    </a>
+                  </>
+                )}
               </div>
             </nav>
           </motion.div>
