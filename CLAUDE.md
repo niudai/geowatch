@@ -3,8 +3,11 @@
 ## 产品定位
 
 GeoWatch 是一个 **GEO（Generative Engine Optimization）/ AEO（Answer Engine Optimization）** 监控平台，竞品是：
-- **Writesonic**（$39-$499/月，AI SEO + GEO 追踪 + 内容创作）
-- **Profound**（$499+/月，纯 GEO/AEO 可见性追踪）
+- **Profound**（$99/月 Starter 仅ChatGPT；$399/月 Growth；$499/月 Lite 自助；Enterprise 定制 $2K-5K+/月）
+- **Writesonic**（GEO功能从 $249/月 Professional 起；低价位仅内容创作/传统SEO）
+- **Otterly.ai**（$29/月 Lite 15条prompt；$189/月 Standard；$489/月 Premium）
+- **Peec AI**（€90/月 Starter；€199/月 Pro；€499/月 Enterprise）
+- **Geoptie**（$49/月起，所有AI引擎均包含）
 
 GeoWatch 定位：比 Profound 更亲民的价格，专注 AI 搜索可见性追踪。目前处于 **private beta / 内测阶段**，landing page 上的 CTA 是 waitlist 表单。
 
