@@ -63,18 +63,6 @@ export default function DashboardContent() {
     setShowWizard(true);
   }
 
-  async function handleManageBilling() {
-    try {
-      const res = await fetch('/api/stripe/portal', { method: 'POST' });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (err) {
-      console.error('Portal error:', err);
-    }
-  }
-
   const planLabel = subscription?.plan === 'free' ? 'Free Tier' :
     subscription?.plan === 'pro' ? 'Pro Plan' :
     subscription?.plan === 'business' ? 'Business Plan' : '';
@@ -122,7 +110,7 @@ export default function DashboardContent() {
             {/* Manage billing button — only for paying users */}
             {subscription?.plan && subscription.plan !== 'free' && (
               <button
-                onClick={handleManageBilling}
+                onClick={() => router.push('/dashboard/billing')}
                 className="px-3 py-1.5 text-xs text-white/50 hover:text-white/70 border border-zinc-700/60 rounded-lg transition"
               >
                 Manage Billing

@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { users } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 import { stripe } from '@/lib/stripe'
-import { PLANS, TRIAL_DAYS, type PlanKey } from '@/lib/plans'
+import { PLANS, TRIAL_DAYS, PRICE_OVERRIDE_USERS, type PlanKey } from '@/lib/plans'
 import type Stripe from 'stripe'
 
 export async function POST(req: Request) {
@@ -60,14 +60,34 @@ export async function POST(req: Request) {
       metadata: { userId: session.user.id, plan },
     }
 
-    // Add trial if user hasn't used it before
-    if (!user?.hasUsedTrial) {
+    // Check if user has override pricing
+    const overridePrice = session.user.email ? PRICE_OVERRIDE_USERS[session.user.email] : undefined
+    if (overridePrice !== undefined) {
+      const planPriceCents = PLANS[plan].price * 100
+      const discountAmount = planPriceCents - overridePrice
+      if (discountAmount > 0) {
+        const couponId = `geowatch-test-override-${plan}`
+        try {
+          await stripe.coupons.retrieve(couponId)
+        } catch {
+          await stripe.coupons.create({
+            id: couponId,
+            amount_off: discountAmount,
+            currency: 'usd',
+            duration: 'forever',
+            name: `GeoWatch Test Override (${plan})`,
+          })
+        }
+        checkoutParams.discounts = [{ coupon: couponId }]
+      }
+    } else if (!user?.hasUsedTrial) {
+      // Add trial if user hasn't used it before (skip trial for override users)
       checkoutParams.subscription_data = {
         trial_period_days: TRIAL_DAYS,
       }
     }
 
-    console.log('[Checkout] Creating session for plan:', plan, 'priceId:', priceId, 'customer:', customerId)
+    console.log('[Checkout] Creating session for plan:', plan, 'priceId:', priceId, 'customer:', customerId, 'override:', overridePrice !== undefined)
     const checkoutSession = await stripe.checkout.sessions.create(checkoutParams)
     return Response.json({ url: checkoutSession.url })
   } catch (error) {

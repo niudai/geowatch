@@ -17,6 +17,11 @@ export type PlanKey = keyof typeof PLANS
 
 export const TRIAL_DAYS = 3
 
+// Override pricing for specific users (value in cents)
+export const PRICE_OVERRIDE_USERS: Record<string, number> = {
+  'niudai.geek@gmail.com': 50, // $0.50
+}
+
 export function getPlanByPriceId(priceId: string): PlanKey | null {
   for (const [key, plan] of Object.entries(PLANS)) {
     if (plan.stripePriceId === priceId) return key as PlanKey
