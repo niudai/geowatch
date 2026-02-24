@@ -1,8 +1,10 @@
 import { db } from '@/lib/db';
-import { apps, keywords, monitoringResults, subscriptions } from '@/lib/schema';
+import { apps, keywords, monitoringResults, users } from '@/lib/schema';
 import { eq, and } from 'drizzle-orm';
 import { queryGoogleAIMode, detectMention } from '@/lib/monitoring';
 import { getUserSubscription, isActiveSubscription } from '@/lib/subscription';
+import { sendAuditEmail } from '@/lib/email';
+import type { AppReport } from '@/lib/email';
 
 export const maxDuration = 300;
 
@@ -27,6 +29,16 @@ export async function GET(req: Request) {
   let totalResults = 0;
   const errors: string[] = [];
 
+  // Collect per-user report data for emails
+  const userReports: Record<string, {
+    userId: string;
+    apps: AppReport[];
+    totalKeywords: number;
+    totalMentions: number;
+    totalResults: number;
+    errors: string[];
+  }> = {};
+
   for (const app of allApps) {
     // Skip apps whose owners don't have an active subscription
     const sub = await getUserSubscription(app.userId);
@@ -35,12 +47,31 @@ export async function GET(req: Request) {
       continue;
     }
 
+    // Initialize user report
+    if (!userReports[app.userId]) {
+      userReports[app.userId] = {
+        userId: app.userId,
+        apps: [],
+        totalKeywords: 0,
+        totalMentions: 0,
+        totalResults: 0,
+        errors: [],
+      };
+    }
+
     const appKeywords = await db
       .select()
       .from(keywords)
       .where(and(eq(keywords.appId, app.id), eq(keywords.status, 'active')));
 
     const brandName = app.name;
+    const appReport: AppReport = {
+      appName: app.name,
+      keywordsChecked: 0,
+      mentions: 0,
+      totalResults: 0,
+      results: [],
+    };
 
     for (const kw of appKeywords) {
       try {
@@ -75,24 +106,79 @@ export async function GET(req: Request) {
           .set({ lastCheckedAt: new Date() })
           .where(eq(keywords.id, kw.id));
 
+        // Track for email report
+        appReport.results.push({
+          keyword: kw.keyword,
+          source: 'google_ai_mode',
+          mentioned,
+        });
+        appReport.totalResults++;
+        if (mentioned) appReport.mentions++;
+
         totalResults++;
       } catch (error) {
         const msg = `App "${app.name}" keyword "${kw.keyword}": ${error instanceof Error ? error.message : 'Unknown error'}`;
         console.error(`[Cron] Error: ${msg}`);
         errors.push(msg);
+        userReports[app.userId].errors.push(msg);
       }
 
       totalChecked++;
+      appReport.keywordsChecked++;
+    }
+
+    userReports[app.userId].apps.push(appReport);
+    userReports[app.userId].totalKeywords += appReport.keywordsChecked;
+    userReports[app.userId].totalMentions += appReport.mentions;
+    userReports[app.userId].totalResults += appReport.totalResults;
+  }
+
+  // Send audit emails to each user
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  let emailsSent = 0;
+  for (const report of Object.values(userReports)) {
+    // Skip if no results were generated
+    if (report.totalResults === 0 && report.errors.length === 0) continue;
+
+    try {
+      const [user] = await db
+        .select({ name: users.name, email: users.email })
+        .from(users)
+        .where(eq(users.id, report.userId))
+        .limit(1);
+
+      if (!user?.email) continue;
+
+      await sendAuditEmail({
+        userName: user.name || 'there',
+        userEmail: user.email,
+        date: dateStr,
+        apps: report.apps,
+        totalKeywords: report.totalKeywords,
+        totalMentions: report.totalMentions,
+        totalResults: report.totalResults,
+        errors: report.errors,
+      });
+      emailsSent++;
+    } catch (error) {
+      console.error(`[Cron] Failed to send email for user ${report.userId}:`, error);
     }
   }
 
-  console.log(`[Cron] Done. Apps: ${allApps.length}, Keywords: ${totalChecked}, Results: ${totalResults}, Errors: ${errors.length}`);
+  console.log(`[Cron] Done. Apps: ${allApps.length}, Keywords: ${totalChecked}, Results: ${totalResults}, Errors: ${errors.length}, Emails: ${emailsSent}`);
 
   return Response.json({
     status: 'completed',
     apps: allApps.length,
     keywordsChecked: totalChecked,
     resultsCreated: totalResults,
+    emailsSent,
     errors: errors.length > 0 ? errors : undefined,
   });
 }

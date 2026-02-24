@@ -439,12 +439,6 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   }, [params]);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/');
-    }
-  }, [status, router]);
-
-  useEffect(() => {
     if (status === 'authenticated' && appId) {
       fetchAppData();
     }
@@ -551,7 +545,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
 
   if (status === 'loading' || loading || !appId) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#050508] text-white/60">
+      <div className="flex items-center justify-center h-64 text-white/60">
         Loading...
       </div>
     );
@@ -559,7 +553,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
 
   if (!app) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#050508]">
+      <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <p className="text-xl text-white/45 mb-4">App not found</p>
           <Link href="/dashboard" className="text-cyan-400 hover:text-cyan-300 transition">
@@ -571,7 +565,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white">
+    <div className="text-white">
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -843,9 +837,9 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
           }
 
           return (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full">
               {/* Left: AI Response */}
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-3 overflow-y-auto">
                 {/* Mention badge */}
                 <div className="mb-4">
                   <span
@@ -869,7 +863,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
               </div>
 
               {/* Right: Cited Sources */}
-              <div className="lg:col-span-2 lg:border-l lg:border-zinc-700/40 lg:pl-6">
+              <div className="lg:col-span-2 lg:border-l lg:border-zinc-700/40 lg:pl-6 overflow-y-auto">
                 <h3 className="text-sm font-medium text-white/50 mb-3">
                   Cited Sources ({allLinks.length})
                 </h3>

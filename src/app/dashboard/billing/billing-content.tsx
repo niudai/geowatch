@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
 import { useSubscription } from '@/hooks/useSubscription'
 import SubscribeModal from '@/components/SubscribeModal'
 
@@ -43,20 +42,14 @@ const statusLabels: Record<string, { text: string; className: string }> = {
 }
 
 export default function BillingContent() {
-  const { data: session, status: authStatus } = useSession()
-  const router = useRouter()
+  const { status: authStatus } = useSession()
   const { subscription, loading } = useSubscription()
   const [showSubscribeModal, setShowSubscribeModal] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
 
-  if (authStatus === 'unauthenticated') {
-    router.push('/')
-    return null
-  }
-
   if (authStatus === 'loading' || loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#050508] text-white/60">
+      <div className="flex items-center justify-center h-64 text-white/60">
         Loading...
       </div>
     )
@@ -95,19 +88,10 @@ export default function BillingContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white">
+    <div className="text-white">
       <div className="max-w-3xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="text-sm text-white/40 hover:text-white/70 transition mb-4 flex items-center gap-1"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Dashboard
-          </button>
           <h1 className="text-2xl font-bold text-white">Billing & Subscription</h1>
           <p className="text-white/45 text-sm mt-1">Manage your plan, usage, and payment details</p>
         </div>

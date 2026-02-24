@@ -25,12 +25,6 @@ export default function DashboardContent() {
   const { subscription, loading: subLoading, refresh: refreshSubscription } = useSubscription();
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/');
-    }
-  }, [status, router]);
-
-  useEffect(() => {
     if (status === 'authenticated') {
       fetchApps();
     }
@@ -69,14 +63,14 @@ export default function DashboardContent() {
 
   if (status === 'loading' || loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#050508] text-white/60">
+      <div className="flex items-center justify-center h-64 text-white/60">
         Loading...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#050508] text-white">
+    <div className="text-white">
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Checkout success banner */}
         {checkoutSuccess && (
@@ -91,7 +85,7 @@ export default function DashboardContent() {
         {/* Header */}
         <div className="flex items-center justify-between mb-10">
           <div>
-            <h1 className="text-3xl font-bold text-white">GeoWatch Dashboard</h1>
+            <h1 className="text-3xl font-bold text-white">Dashboard</h1>
             <p className="text-white/45 text-sm mt-1">Monitor your brand mentions in AI search results</p>
           </div>
           <div className="flex items-center gap-3">
@@ -106,15 +100,6 @@ export default function DashboardContent() {
               }`}>
                 {subscription?.status === 'trialing' ? `${planLabel} (Trial)` : planLabel}
               </span>
-            )}
-            {/* Manage billing button — only for paying users */}
-            {subscription?.plan && subscription.plan !== 'free' && (
-              <button
-                onClick={() => router.push('/dashboard/billing')}
-                className="px-3 py-1.5 text-xs text-white/50 hover:text-white/70 border border-zinc-700/60 rounded-lg transition"
-              >
-                Manage Billing
-              </button>
             )}
             <button
               onClick={handleCreateApp}
