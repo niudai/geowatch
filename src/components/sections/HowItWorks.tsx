@@ -21,7 +21,7 @@ const steps = [
     icon: Cpu,
     title: "We track everything",
     description:
-      "Our system runs thousands of prompts daily across ChatGPT, Perplexity, Google AI Overviews, Claude, and more — capturing every mention, citation, and sentiment.",
+      "We use real ChatGPT Plus accounts on clean US California residential IPs with memory disabled — not API shortcuts. Every query matches what your customers actually see across ChatGPT, Google AI Mode, and more.",
     color: "text-cyan-400",
     borderColor: "border-cyan-500/30",
     bgColor: "bg-cyan-500/12",
