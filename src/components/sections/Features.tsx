@@ -6,9 +6,9 @@ import { Radio, BarChart3, Search, Zap, Users, Shield } from "lucide-react";
 const features = [
   {
     icon: Radio,
-    title: "Real-Time AI Monitoring",
+    title: "Real AI Engine Access",
     description:
-      "Track your brand mentions across ChatGPT, Perplexity, Google AI Overviews, Claude, Grok, and more — updated daily with full citation context.",
+      "We query ChatGPT with a real Plus subscription on clean US California residential IPs, memory disabled. Google AI Mode too. No API shortcuts — results match what your customers actually see.",
     gradient: "from-cyan-500/10 to-transparent",
     border: "border-zinc-700/50 hover:border-cyan-500/60",
     iconColor: "text-cyan-400",
