@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { useSubscription } from '@/hooks/useSubscription';
+import { getSourceLabel } from '@/lib/platforms';
 
 interface App {
   id: string;
@@ -35,6 +36,11 @@ interface CitationItem {
   urls: string[];
 }
 
+interface CompetitorMention {
+  name: string;
+  mentioned: boolean;
+}
+
 interface MonitoringResult {
   id: string;
   appId: string;
@@ -47,6 +53,7 @@ interface MonitoringResult {
   mentionText: string | null;
   citations: string | CitationItem[] | null;
   links: string | LinkItem[] | null;
+  competitorMentions: string | CompetitorMention[] | null;
   createdAt: string;
 }
 
@@ -202,6 +209,110 @@ function CitationsList({ links, citations }: { links: LinkItem[]; citations: Cit
   );
 }
 
+// Competitive Leaderboard
+function CompetitiveLeaderboard({
+  results,
+  brandName,
+}: {
+  results: MonitoringResult[];
+  brandName: string;
+}) {
+  const leaderboard = useMemo(() => {
+    const counts: Record<string, { name: string; count: number }> = {};
+    let totalResponses = 0;
+
+    for (const result of results) {
+      if (!result.aiResponse) continue;
+      totalResponses++;
+
+      const competitors = parseJsonField<CompetitorMention>(result.competitorMentions);
+      const seen = new Set<string>();
+      for (const c of competitors) {
+        const lower = c.name.toLowerCase();
+        if (seen.has(lower)) continue;
+        seen.add(lower);
+        if (!counts[lower]) counts[lower] = { name: c.name, count: 0 };
+        counts[lower].count++;
+      }
+    }
+
+    const brandMentions = results.filter(r => r.mentionedInResponse).length;
+    const entries = [
+      { name: brandName, count: brandMentions, isBrand: true },
+      ...Object.values(counts).map(c => ({ ...c, isBrand: false })),
+    ];
+
+    entries.sort((a, b) => b.count - a.count);
+
+    return { entries, totalResponses };
+  }, [results, brandName]);
+
+  // Only show if there's at least one competitor
+  const hasCompetitors = leaderboard.entries.some(e => !e.isBrand && e.count > 0);
+  if (!hasCompetitors || leaderboard.totalResponses === 0) return null;
+
+  const maxCount = Math.max(...leaderboard.entries.map(e => e.count), 1);
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-700/60 rounded-lg overflow-hidden mb-8">
+      <div className="px-5 py-4 border-b border-zinc-700/40">
+        <h2 className="text-base font-semibold text-white/80">Competitive Landscape</h2>
+        <p className="text-xs text-white/35 mt-0.5">
+          How often each brand appears across {leaderboard.totalResponses} AI response{leaderboard.totalResponses !== 1 ? 's' : ''}
+        </p>
+      </div>
+      <div className="px-5 py-4 space-y-2.5">
+        {leaderboard.entries.map((entry, i) => {
+          const pct = leaderboard.totalResponses > 0
+            ? Math.round((entry.count / leaderboard.totalResponses) * 100)
+            : 0;
+          const barWidth = maxCount > 0 ? (entry.count / maxCount) * 100 : 0;
+
+          return (
+            <div key={entry.name} className="flex items-center gap-3">
+              {/* Rank */}
+              <span className="text-xs text-white/25 w-5 text-right shrink-0 tabular-nums">
+                {i + 1}
+              </span>
+
+              {/* Name */}
+              <span
+                className={`text-sm w-36 truncate shrink-0 ${
+                  entry.isBrand ? 'text-cyan-400 font-medium' : 'text-white/70'
+                }`}
+              >
+                {entry.name}
+                {entry.isBrand && (
+                  <span className="text-[10px] text-cyan-400/60 ml-1">(You)</span>
+                )}
+              </span>
+
+              {/* Bar */}
+              <div className="flex-1 h-5 bg-zinc-800 rounded overflow-hidden">
+                <div
+                  className={`h-full rounded transition-all duration-500 ${
+                    entry.isBrand ? 'bg-cyan-500/40' : 'bg-zinc-600/50'
+                  }`}
+                  style={{ width: `${barWidth}%` }}
+                />
+              </div>
+
+              {/* Percentage */}
+              <span
+                className={`text-xs w-10 text-right shrink-0 tabular-nums ${
+                  entry.isBrand ? 'text-cyan-400' : 'text-white/50'
+                }`}
+              >
+                {pct}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Confirm delete modal
 function ConfirmDeleteModal({
   open,
@@ -286,6 +397,7 @@ function SourceCard({
   const isGoogle = result.source === 'google_ai_mode';
   const links = parseJsonField<LinkItem>(result.links);
   const citations = parseJsonField<CitationItem>(result.citations);
+  const competitors = parseJsonField<CompetitorMention>(result.competitorMentions);
   const responsePreview = result.aiResponse?.substring(0, 600) || '';
   const isTruncated = result.aiResponse?.length > 600;
 
@@ -301,7 +413,7 @@ function SourceCard({
                 : 'bg-purple-500/15 text-purple-400'
             }`}
           >
-            {isGoogle ? 'Google AI Mode' : 'ChatGPT'}
+            {getSourceLabel(result.source)}
           </span>
           <span className="text-xs text-white/40">
             {new Date(result.createdAt).toLocaleString()}
@@ -332,6 +444,20 @@ function SourceCard({
           )}
         </div>
 
+        {/* Competitor tags */}
+        {competitors.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2.5">
+            {competitors.map((c) => (
+              <span
+                key={c.name}
+                className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700/40 text-white/45"
+              >
+                {c.name}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Citations */}
         <CitationsList links={links} citations={citations} />
       </div>
@@ -341,37 +467,6 @@ function SourceCard({
 
 // Paywall banner for non-subscribers
 function PaywallBanner({ hasUsedTrial }: { hasUsedTrial: boolean }) {
-  const [loading, setLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleClick(plan: 'pro' | 'business') {
-    setLoading(plan);
-    setError(null);
-    try {
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to create checkout session.');
-        setLoading(null);
-        return;
-      }
-      if (!data.url) {
-        setError('No checkout URL returned. Please try again.');
-        setLoading(null);
-        return;
-      }
-      window.location.href = data.url;
-    } catch (err) {
-      console.error('Checkout error:', err);
-      setError('Network error. Please try again.');
-      setLoading(null);
-    }
-  }
-
   return (
     <div className="mb-8 rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-900/20 via-zinc-900 to-cyan-900/20 p-6">
       <div className="flex items-start justify-between gap-6">
@@ -390,26 +485,13 @@ function PaywallBanner({ hasUsedTrial }: { hasUsedTrial: boolean }) {
               3-day free trial included
             </span>
           )}
-          {error && (
-            <p className="text-sm text-red-400 mt-2">{error}</p>
-          )}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => handleClick('pro')}
-            disabled={loading !== null}
-            className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition text-sm disabled:opacity-50"
-          >
-            {loading === 'pro' ? 'Redirecting...' : 'Start Free Trial \u2014 Pro $49/mo'}
-          </button>
-          <button
-            onClick={() => handleClick('business')}
-            disabled={loading !== null}
-            className="px-5 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-lg transition text-sm disabled:opacity-50"
-          >
-            {loading === 'business' ? 'Redirecting...' : 'Business $199/mo'}
-          </button>
-        </div>
+        <Link
+          href="/dashboard/billing"
+          className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg transition text-sm shrink-0"
+        >
+          View Plans & Pricing
+        </Link>
       </div>
     </div>
   );
@@ -427,6 +509,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   const [monitoring, setMonitoring] = useState(false);
   const [modalResult, setModalResult] = useState<MonitoringResult | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Keyword | null>(null);
+  const [selectedKeyword, setSelectedKeyword] = useState<Keyword | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { subscription, loading: subLoading } = useSubscription();
 
@@ -601,15 +684,15 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
                 )}
               </button>
             ) : (
-              <button
-                disabled
-                className="px-5 py-2 bg-zinc-700 text-white/40 font-semibold rounded-lg text-sm cursor-not-allowed flex items-center gap-2"
+              <Link
+                href="/dashboard/billing"
+                className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-lg text-sm flex items-center gap-2 transition"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
                 Subscribe to Monitor
-              </button>
+              </Link>
             )}
           </div>
         </div>
@@ -642,6 +725,11 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
               </p>
             </div>
           </div>
+        )}
+
+        {/* Competitive Leaderboard */}
+        {totalResults > 0 && (
+          <CompetitiveLeaderboard results={results} brandName={app.name} />
         )}
 
         {/* Keywords Section */}
@@ -688,7 +776,8 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
                 return (
                   <div
                     key={kw.id}
-                    className="flex items-center gap-4 px-5 py-3 hover:bg-zinc-800/40 transition group"
+                    className="flex items-center gap-4 px-5 py-3 hover:bg-zinc-800/40 transition group cursor-pointer"
+                    onClick={() => setSelectedKeyword(kw)}
                   >
                     {/* Index */}
                     <span className="text-xs text-white/20 w-5 text-right shrink-0 tabular-nums">{i + 1}</span>
@@ -718,7 +807,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
 
                     {/* Delete button — always visible */}
                     <button
-                      onClick={() => setDeleteTarget(kw)}
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(kw); }}
                       className="p-1.5 rounded-md text-white/20 hover:text-red-400 hover:bg-red-500/10 transition shrink-0"
                       aria-label={`Delete keyword: ${kw.keyword}`}
                     >
@@ -793,6 +882,63 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
         </div>
       </div>
 
+      {/* Keyword Detail Modal */}
+      <Modal
+        open={!!selectedKeyword}
+        onClose={() => setSelectedKeyword(null)}
+        wide
+        title={selectedKeyword ? selectedKeyword.keyword : undefined}
+      >
+        {selectedKeyword && (() => {
+          const kwResults = results.filter((r) => r.keywordId === selectedKeyword.id);
+          const mentions = kwResults.filter((r) => r.mentionedInResponse).length;
+          return (
+            <div className="p-5 space-y-4">
+              {/* Stats row */}
+              <div className="flex items-center gap-3">
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                  mentions > 0
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : 'bg-zinc-800 text-white/40'
+                }`}>
+                  {mentions}/{kwResults.length} mentioned
+                </span>
+                {selectedKeyword.lastCheckedAt && (
+                  <span className="text-xs text-white/30">
+                    Last checked {new Date(selectedKeyword.lastCheckedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              {/* Source cards */}
+              {kwResults.length === 0 ? (
+                <div className="text-center py-12 text-white/30">
+                  <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <p className="text-sm">No results yet for this keyword.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(['google_ai_mode', 'chatgpt'] as const).map((source) => {
+                    const result = kwResults.find((r) => r.source === source);
+                    if (!result) return null;
+                    return (
+                      <SourceCard
+                        key={result.id}
+                        result={result}
+                        brandName={app.name}
+                        onViewFull={(r) => { setSelectedKeyword(null); setModalResult(r); }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Modal>
+
       {/* Delete Confirmation Modal */}
       <ConfirmDeleteModal
         open={!!deleteTarget}
@@ -809,7 +955,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
         wide
         title={
           modalResult
-            ? `${modalResult.source === 'google_ai_mode' ? 'Google AI Mode' : 'ChatGPT'} — ${modalResult.queryText}`
+            ? `${getSourceLabel(modalResult.source)} — ${modalResult.queryText}`
             : undefined
         }
       >
@@ -837,9 +983,9 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
           }
 
           return (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-[calc(85vh-8rem)]">
               {/* Left: AI Response */}
-              <div className="lg:col-span-3 overflow-y-auto">
+              <div className="lg:col-span-3 overflow-y-auto min-h-0">
                 {/* Mention badge */}
                 <div className="mb-4">
                   <span
@@ -863,7 +1009,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
               </div>
 
               {/* Right: Cited Sources */}
-              <div className="lg:col-span-2 lg:border-l lg:border-zinc-700/40 lg:pl-6 overflow-y-auto">
+              <div className="lg:col-span-2 lg:border-l lg:border-zinc-700/40 lg:pl-6 overflow-y-auto min-h-0">
                 <h3 className="text-sm font-medium text-white/50 mb-3">
                   Cited Sources ({allLinks.length})
                 </h3>
