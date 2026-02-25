@@ -54,3 +54,7 @@ next-env.d.ts
 
 # Test screenshots
 scripts/*.png
+
+# Crisp auto-reply bot state
+scripts/.crisp-auto-reply-state.json
+scripts/.crisp-auto-reply.lock

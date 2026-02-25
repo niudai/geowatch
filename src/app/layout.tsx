@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Providers from "@/components/Providers";
+import Script from "next/script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "GeoWatch — See How AI Sees Your Brand",
   description:
-    "Track your brand's visibility in ChatGPT, Perplexity, Google AI Overviews, and every major AI Answer Engine. Monitor, optimize, and dominate AI search results.",
+    "Track your brand's visibility in ChatGPT, Google AI Mode, and more AI search engines. Monitor, optimize, and dominate AI search results.",
   keywords: [
     "GEO",
     "generative engine optimization",
@@ -63,6 +64,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#050508] text-[#f0f0f5]`}
       >
         <Providers>{children}</Providers>
+        <Script
+          id="crisp-chat"
+          dangerouslySetInnerHTML={{
+            __html: `window.$crisp=[];window.CRISP_WEBSITE_ID="d81825de-e162-4f20-abc6-7179519f4dd8";(function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();`,
+          }}
+        />
       </body>
     </html>
   );
