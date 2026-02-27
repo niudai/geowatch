@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -70,44 +70,72 @@ function parseJsonField<T>(field: string | T[] | null | undefined): T[] {
 }
 
 // Highlight brand name in AI response text
-function HighlightedResponse({ text, brandName }: { text: string; brandName: string }) {
-  if (!text || !brandName) return <span>{text}</span>;
+const COMPETITOR_COLORS = [
+  { mark: 'bg-orange-500/20 text-orange-300', tag: 'bg-orange-500/15 text-orange-400 border-orange-500/30' },
+  { mark: 'bg-pink-500/20 text-pink-300',     tag: 'bg-pink-500/15 text-pink-400 border-pink-500/30' },
+  { mark: 'bg-violet-500/20 text-violet-300', tag: 'bg-violet-500/15 text-violet-400 border-violet-500/30' },
+  { mark: 'bg-yellow-500/20 text-yellow-200', tag: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
+  { mark: 'bg-lime-500/20 text-lime-300',     tag: 'bg-lime-500/15 text-lime-400 border-lime-500/30' },
+  { mark: 'bg-amber-500/20 text-amber-300',   tag: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+  { mark: 'bg-rose-500/20 text-rose-300',     tag: 'bg-rose-500/15 text-rose-400 border-rose-500/30' },
+  { mark: 'bg-indigo-500/20 text-indigo-300', tag: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' },
+];
+
+function HighlightedResponse({
+  text,
+  brandName,
+  competitors = [],
+}: {
+  text: string;
+  brandName: string;
+  competitors?: CompetitorMention[];
+}) {
+  if (!text) return <span>{text}</span>;
+
+  type Term = { lower: string; len: number; colorIdx: number };
+  const terms: Term[] = [];
+  if (brandName) terms.push({ lower: brandName.toLowerCase(), len: brandName.length, colorIdx: -1 });
+  for (let i = 0; i < competitors.length; i++) {
+    const n = competitors[i].name;
+    if (n) terms.push({ lower: n.toLowerCase(), len: n.length, colorIdx: i % COMPETITOR_COLORS.length });
+  }
+  if (terms.length === 0) return <span>{text}</span>;
 
   const lowerText = text.toLowerCase();
-  const lowerBrand = brandName.toLowerCase();
-  const parts: { text: string; highlight: boolean }[] = [];
-  let lastIndex = 0;
-
-  let searchFrom = 0;
-  while (searchFrom < lowerText.length) {
-    const idx = lowerText.indexOf(lowerBrand, searchFrom);
-    if (idx === -1) break;
-    if (idx > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, idx), highlight: false });
+  type Match = { start: number; end: number; colorIdx: number };
+  const matches: Match[] = [];
+  for (const t of terms) {
+    let from = 0;
+    while (from < lowerText.length) {
+      const idx = lowerText.indexOf(t.lower, from);
+      if (idx === -1) break;
+      matches.push({ start: idx, end: idx + t.len, colorIdx: t.colorIdx });
+      from = idx + t.len;
     }
-    parts.push({ text: text.slice(idx, idx + brandName.length), highlight: true });
-    lastIndex = idx + brandName.length;
-    searchFrom = lastIndex;
   }
-  if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), highlight: false });
+  if (matches.length === 0) return <span>{text}</span>;
+
+  matches.sort((a, b) => a.start - b.start);
+  const kept: Match[] = [];
+  let cursor = 0;
+  for (const m of matches) {
+    if (m.start >= cursor) { kept.push(m); cursor = m.end; }
   }
 
-  if (parts.length === 0) return <span>{text}</span>;
-
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.highlight ? (
-          <mark key={i} className="bg-cyan-500/20 text-cyan-300 px-0.5 rounded">
-            {part.text}
-          </mark>
-        ) : (
-          <span key={i}>{part.text}</span>
-        )
-      )}
-    </>
-  );
+  const nodes: React.ReactNode[] = [];
+  let pos = 0;
+  for (const m of kept) {
+    if (m.start > pos) nodes.push(<span key={`t${pos}`}>{text.slice(pos, m.start)}</span>);
+    const word = text.slice(m.start, m.end);
+    if (m.colorIdx === -1) {
+      nodes.push(<mark key={`m${m.start}`} className="bg-cyan-500/20 text-cyan-300 px-0.5 rounded">{word}</mark>);
+    } else {
+      nodes.push(<mark key={`m${m.start}`} className={`${COMPETITOR_COLORS[m.colorIdx].mark} px-0.5 rounded`}>{word}</mark>);
+    }
+    pos = m.end;
+  }
+  if (pos < text.length) nodes.push(<span key="tend">{text.slice(pos)}</span>);
+  return <>{nodes}</>;
 }
 
 // Collapsible citations list
@@ -313,6 +341,147 @@ function CompetitiveLeaderboard({
   );
 }
 
+// Monitoring Progress Modal
+type MonitoringEvent = {
+  type: 'start' | 'step' | 'complete' | 'error';
+  source?: 'google_ai_mode' | 'chatgpt';
+  keyword?: string;
+  status?: 'querying' | 'mentioned' | 'not_mentioned' | 'error';
+  step?: number;
+  total?: number;
+  keywords?: number;
+  error?: string;
+};
+
+function MonitoringProgressModal({
+  open,
+  onClose,
+  events,
+  done,
+}: {
+  open: boolean;
+  onClose: () => void;
+  events: MonitoringEvent[];
+  done: boolean;
+}) {
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [events]);
+
+  const total = events.find((e) => e.total)?.total ?? 0;
+  const lastStep = [...events].reverse().find((e) => e.type === 'step' && e.step);
+  const progress = total > 0 && lastStep?.step ? Math.round((lastStep.step / total) * 100) : done ? 100 : 0;
+
+  function sourceLabel(source?: string) {
+    if (source === 'google_ai_mode') return 'Google AI Mode';
+    if (source === 'chatgpt') return 'ChatGPT';
+    return source ?? '';
+  }
+
+  function statusIcon(status?: string) {
+    if (status === 'querying') return <span className="inline-block w-3 h-3 border-2 border-cyan-400/60 border-t-cyan-400 rounded-full animate-spin" />;
+    if (status === 'mentioned') return <span className="text-emerald-400">✓</span>;
+    if (status === 'not_mentioned') return <span className="text-white/30">–</span>;
+    if (status === 'error') return <span className="text-red-400">✕</span>;
+    return null;
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={done ? onClose : undefined}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-zinc-900 border border-zinc-700/60 rounded-xl w-full max-w-xl mx-4 flex flex-col shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            {done ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+            )}
+            <h2 className="text-sm font-semibold text-white">
+              {done ? 'Monitoring Complete' : 'Running Monitoring…'}
+            </h2>
+          </div>
+          {done && (
+            <button onClick={onClose} className="text-white/40 hover:text-white/70 transition">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        <div className="px-6 pt-4 pb-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-white/40">Progress</span>
+            <span className="text-xs text-white/40 tabular-nums">{progress}%</span>
+          </div>
+          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Log stream */}
+        <div className="px-6 py-3 space-y-1.5 max-h-72 overflow-y-auto font-mono text-xs">
+          {events.map((ev, i) => {
+            if (ev.type === 'start') return (
+              <div key={i} className="text-white/40">
+                ▶ Starting monitoring for {ev.keywords} keyword{ev.keywords !== 1 ? 's' : ''} ({ev.total} checks total)
+              </div>
+            );
+            if (ev.type === 'step') return (
+              <div key={i} className={`flex items-center gap-2 ${ev.status === 'error' ? 'text-red-400' : ev.status === 'querying' ? 'text-white/60' : ev.status === 'mentioned' ? 'text-emerald-400' : 'text-white/35'}`}>
+                <span className="shrink-0 w-4 flex justify-center">{statusIcon(ev.status)}</span>
+                <span className="truncate">
+                  [{sourceLabel(ev.source)}] &quot;{ev.keyword}&quot;
+                  {ev.status === 'querying' && ' — querying…'}
+                  {ev.status === 'mentioned' && ' — ✓ mentioned'}
+                  {ev.status === 'not_mentioned' && ' — not mentioned'}
+                  {ev.status === 'error' && ` — error: ${ev.error}`}
+                </span>
+                <span className="ml-auto text-white/20 shrink-0">{ev.step}/{ev.total}</span>
+              </div>
+            );
+            if (ev.type === 'complete') return (
+              <div key={i} className="text-emerald-400 pt-1">✓ All checks complete</div>
+            );
+            if (ev.type === 'error') return (
+              <div key={i} className="text-red-400">✕ Error: {ev.error}</div>
+            );
+            return null;
+          })}
+          <div ref={logsEndRef} />
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-zinc-800">
+          {done ? (
+            <button
+              onClick={onClose}
+              className="w-full py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-sm font-semibold hover:opacity-90 transition"
+            >
+              Done — View Results
+            </button>
+          ) : (
+            <p className="text-xs text-white/30 text-center">This may take a few minutes. Do not close this window.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Confirm delete modal
 function ConfirmDeleteModal({
   open,
@@ -433,7 +602,7 @@ function SourceCard({
       {/* AI Response */}
       <div className="px-4 py-3">
         <div className="text-sm text-white/65 leading-relaxed max-h-40 overflow-y-auto">
-          <HighlightedResponse text={responsePreview} brandName={brandName} />
+          <HighlightedResponse text={responsePreview} brandName={brandName} competitors={competitors} />
           {isTruncated && (
             <button
               onClick={() => onViewFull(result)}
@@ -447,10 +616,10 @@ function SourceCard({
         {/* Competitor tags */}
         {competitors.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2.5">
-            {competitors.map((c) => (
+            {competitors.map((c, i) => (
               <span
                 key={c.name}
-                className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700/40 text-white/45"
+                className={`text-[11px] px-2 py-0.5 rounded border ${COMPETITOR_COLORS[i % COMPETITOR_COLORS.length].tag}`}
               >
                 {c.name}
               </span>
@@ -507,7 +676,13 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   const [loading, setLoading] = useState(true);
   const [newKeyword, setNewKeyword] = useState('');
   const [monitoring, setMonitoring] = useState(false);
+  const [showMonitoringModal, setShowMonitoringModal] = useState(false);
+  const [monitoringEvents, setMonitoringEvents] = useState<MonitoringEvent[]>([]);
+  const [monitoringDone, setMonitoringDone] = useState(false);
   const [modalResult, setModalResult] = useState<MonitoringResult | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<Keyword | null>(null);
   const [selectedKeyword, setSelectedKeyword] = useState<Keyword | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -571,6 +746,44 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
     }
   }
 
+  async function suggestKeywords() {
+    if (!appId) return;
+    setSuggesting(true);
+    setSuggestions([]);
+    setSelectedSuggestions(new Set());
+    try {
+      const res = await fetch(`/api/apps/${appId}/suggest-keywords`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.suggestions)) {
+        setSuggestions(data.suggestions);
+      }
+    } catch (error) {
+      console.error('Failed to suggest keywords:', error);
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  async function addSelectedKeywords() {
+    if (!appId || selectedSuggestions.size === 0) return;
+    const toAdd = [...selectedSuggestions];
+    for (const kw of toAdd) {
+      try {
+        const res = await fetch(`/api/apps/${appId}/keywords`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword: kw }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setKeywords((prev) => [...prev, data]);
+        }
+      } catch {}
+    }
+    setSuggestions([]);
+    setSelectedSuggestions(new Set());
+  }
+
   async function confirmDeleteKeyword() {
     if (!appId || !deleteTarget) return;
     setDeleting(true);
@@ -593,16 +806,48 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
   async function runMonitoring() {
     if (!appId) return;
     setMonitoring(true);
+    setMonitoringEvents([]);
+    setMonitoringDone(false);
+    setShowMonitoringModal(true);
+
     try {
-      const res = await fetch(`/api/apps/${appId}/run-monitoring`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        await new Promise((r) => setTimeout(r, 2000));
-        await fetchAppData();
+      const res = await fetch(`/api/apps/${appId}/run-monitoring`, { method: 'POST' });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        setMonitoringEvents((prev) => [...prev, { type: 'error', error: data.error ?? 'Request failed' }]);
+        setMonitoringDone(true);
+        setMonitoring(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          const data = line.replace(/^data: /, '').trim();
+          if (!data) continue;
+          try {
+            const event: MonitoringEvent = JSON.parse(data);
+            setMonitoringEvents((prev) => [...prev, event]);
+            if (event.type === 'complete' || event.type === 'error') {
+              setMonitoringDone(true);
+              setMonitoring(false);
+              await fetchAppData();
+            }
+          } catch {}
+        }
       }
     } catch (error) {
       console.error('Failed to run monitoring:', error);
+      setMonitoringEvents((prev) => [...prev, { type: 'error', error: 'Connection failed' }]);
+      setMonitoringDone(true);
     } finally {
       setMonitoring(false);
     }
@@ -757,7 +1002,64 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
               >
                 + Add
               </button>
+              <button
+                onClick={suggestions.length > 0 ? () => { setSuggestions([]); setSelectedSuggestions(new Set()); } : suggestKeywords}
+                disabled={suggesting}
+                className="px-4 py-2 bg-zinc-800 border border-zinc-700/60 rounded-lg hover:bg-zinc-700/60 transition text-sm font-medium text-white/50 hover:text-white/70 disabled:opacity-40 disabled:cursor-not-allowed shrink-0 flex items-center gap-1.5"
+              >
+                {suggesting ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                )}
+                {suggestions.length > 0 ? 'Hide' : 'Suggest'}
+              </button>
             </div>
+
+            {/* Keyword suggestions picker */}
+            {suggestions.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs text-white/35 mb-2">Click to select keywords to add:</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {suggestions.map((kw) => {
+                    const alreadyTracked = keywords.some((k) => k.keyword.toLowerCase() === kw.toLowerCase());
+                    const isSelected = selectedSuggestions.has(kw);
+                    if (alreadyTracked) return null;
+                    return (
+                      <button
+                        key={kw}
+                        onClick={() => {
+                          setSelectedSuggestions((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(kw)) next.delete(kw); else next.add(kw);
+                            return next;
+                          });
+                        }}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition ${
+                          isSelected
+                            ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
+                            : 'bg-zinc-800 border-zinc-700/50 text-white/50 hover:border-zinc-600 hover:text-white/70'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : ''}{kw}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedSuggestions.size > 0 && (
+                  <button
+                    onClick={addSelectedKeywords}
+                    className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold rounded-lg transition"
+                  >
+                    Add {selectedSuggestions.size} selected
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Keyword list */}
@@ -882,6 +1184,14 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
         </div>
       </div>
 
+      {/* Monitoring Progress Modal */}
+      <MonitoringProgressModal
+        open={showMonitoringModal}
+        onClose={() => { setShowMonitoringModal(false); setMonitoring(false); }}
+        events={monitoringEvents}
+        done={monitoringDone}
+      />
+
       {/* Keyword Detail Modal */}
       <Modal
         open={!!selectedKeyword}
@@ -962,6 +1272,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
         {modalResult && (() => {
           const links = parseJsonField<LinkItem>(modalResult.links);
           const citations = parseJsonField<CitationItem>(modalResult.citations);
+          const modalCompetitors = parseJsonField<CompetitorMention>(modalResult.competitorMentions);
           const allLinks: LinkItem[] = [];
           const seen = new Set<string>();
           for (const link of links) {
@@ -1004,7 +1315,7 @@ export default function AppDetailContent({ params }: { params: Promise<{ appId: 
 
                 {/* Full AI Response */}
                 <div className="text-sm text-white/70 leading-relaxed whitespace-pre-wrap">
-                  <HighlightedResponse text={modalResult.aiResponse} brandName={app.name} />
+                  <HighlightedResponse text={modalResult.aiResponse} brandName={app.name} competitors={modalCompetitors} />
                 </div>
               </div>
 
