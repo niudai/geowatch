@@ -12,7 +12,9 @@
     "agent:listen": "node scripts/agent-listener.js",
     "agent:test": "echo '{\"customer_id\":\"test-001\",\"customer_name\":\"Test Customer\",\"message\":\"This is a test message. Is GeoWatch working?\",\"timestamp\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\"}' > /tmp/geowatch-messages/message-test-$(date +%s).json",
     "monitor:deploy": "tsx scripts/monitor-deployment.ts",
-    "watch:deploy": "bash scripts/watch-deployment.sh"
+    "watch:deploy": "bash scripts/watch-deployment.sh",
+    "index:blog": "tsx scripts/request-indexing.ts",
+    "deploy": "git push origin main && pnpm monitor:deploy && pnpm index:blog"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
